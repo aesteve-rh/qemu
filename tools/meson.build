@@ -11,3 +11,12 @@ have_virtiofsd = get_option('virtiofsd') \
 if have_virtiofsd
   subdir('virtiofsd')
 endif
+
+have_virtiovideo = (have_system and
+    have_tools and
+    'CONFIG_LINUX' in config_host)
+
+if have_virtiovideo
+  subdir('vhost-user-video')
+endif
+
