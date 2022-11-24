@@ -280,8 +280,7 @@ static void vhost_user_video_device_realize(DeviceState *dev, Error **errp)
     }
 
     /* TODO Implement VIDEO_ENC, currently only support VIDEO_DEC */
-    virtio_init(vdev, "vhost-user-video", VIRTIO_ID_VIDEO_DEC,
-                sizeof(struct virtio_video_config));
+    virtio_init(vdev, VIRTIO_ID_VIDEO_DEC, sizeof(struct virtio_video_config));
 
     /* one command queue and one event queue */
     video->vhost_dev.nvqs = 2;

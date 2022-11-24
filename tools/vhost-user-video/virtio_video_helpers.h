@@ -33,7 +33,7 @@ typedef struct VuVideo {
 } VuVideo;
 
 struct v4l2_device {
-    gchar *devname;
+    const gchar *devname;
     unsigned int dev_type;
     unsigned int capabilities;
     int fd;

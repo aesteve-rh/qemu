@@ -292,7 +292,7 @@ void v4l2_to_virtio_fmtdesc(struct v4l2_device *dev,
 {
     struct v4l2_fmtdesc *v4l2_fmtdsc = &vid_fmt->fmt;
     struct virtio_video_format_desc *virtio_fmtdesc = &vid_fmt->desc;
-    enum v4l2_buf_type buftype;
+    enum v4l2_buf_type buftype = V4L2_BUF_TYPE_PRIVATE;
     int ret;
 
     if (!vid_fmt) {
