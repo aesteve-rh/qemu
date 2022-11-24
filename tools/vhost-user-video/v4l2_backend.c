@@ -662,7 +662,7 @@ void v4l2_set_device_type(struct v4l2_device *dev, enum v4l2_buf_type type,
 enum v4l2_buf_type get_v4l2_buf_type (enum virtio_video_queue_type queue_type,
                                       bool has_mplane)
 {
-    enum v4l2_buf_type buf_type;
+    enum v4l2_buf_type buf_type = V4L2_BUF_TYPE_PRIVATE;
 
     switch (queue_type) {
     case VIRTIO_VIDEO_QUEUE_TYPE_INPUT:
