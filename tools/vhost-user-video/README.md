@@ -56,8 +56,8 @@ vhost-user-video --socket-path=/tmp/video.sock --v4l2-device=/dev/video3
 # Example v4l2-ctl decode command
 wget https://people.linaro.org/~peter.griffin/jelly_640_480-420P.fwht
 
-v4l2-ctl -d0 -x width=640,height=480 -v width=640,height=480,pixelformat=YU12
---stream-mmap --stream-out-mmap --stream-from jelly_640_480-420P.fwht
+v4l2-ctl -d0 -x width=640,height=480 -v width=640,height=480,pixelformat=YU12 \
+--stream-mmap --stream-out-mmap --stream-from jelly_640_480-420P.fwht \
 --stream-to out-jelly-640-480.YU12
 
 # Play the raw decoded video with ffplay or mplayer
