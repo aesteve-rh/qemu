@@ -56,15 +56,15 @@ vhost-user-video --socket-path=/tmp/video.sock --v4l2-device=/dev/video3
 # Example v4l2-ctl decode command
 wget https://people.linaro.org/~peter.griffin/jelly_640_480-420P.fwht
 
-v4l2-ctl -d0 -x width=640,height=480 -v width=640,height=480,pixelformat=YU12
---stream-mmap --stream-out-mmap --stream-from jelly_640_480-420P.fwht
+v4l2-ctl -d0 -x width=640,height=480 -v width=640,height=480,pixelformat=YU12 \
+--stream-mmap --stream-out-mmap --stream-from jelly_640_480-420P.fwht \
 --stream-to out-jelly-640-480.YU12
 
 # Play the raw decoded video with ffplay or mplayer
-ffplay -loglevel warning -v info -f rawvideo -pixel_format  yuv420p
+ffplay -loglevel warning -v info -f rawvideo -pixel_format  yuv420p \
   -video_size "640x480" ./out-jelly-640-480.YU12
 
-mplayer -demuxer rawvideo -rawvideo
+mplayer -demuxer rawvideo -rawvideo \
   format=i420:w=640:h=480:fps=25 out-jelly-640-480.YU12
 
 # Enable v4l2 debug in virtio-video frontend driver
@@ -74,7 +74,7 @@ echo 0x1f > /sys/class/video4linux/video0/dev_debug
 echo 0x1f > /sys/class/video4linux/video3/dev_debug
 
 # optee-build system qemu virtio-video command
-make QEMU_VIRTFS_ENABLE=y QEMU_USERNET_ENABLE=y CFG_TA_ASLR=n
+make QEMU_VIRTFS_ENABLE=y QEMU_USERNET_ENABLE=y CFG_TA_ASLR=n \
     QEMU_VHOSTUSER_MEM=y QEMU_VIRTVIDEO_ENABLE=y SSH_PORT_FW=y run-only
 
 Current status
