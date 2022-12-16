@@ -23,9 +23,6 @@
 #include "hw/virtio/vhost-user-video.h"
 #include "qemu/error-report.h"
 
-/* currently there is no VIDEO enc/dec defined in Linux virtio_ids.h */
-#define VIRTIO_ID_VIDEO_ENC         30
-#define VIRTIO_ID_VIDEO_DEC         31
 #define MAX_CAPS_LEN 4096
 
 static void vhost_user_video_get_config(VirtIODevice *vdev, uint8_t *config)
@@ -280,7 +277,7 @@ static void vhost_user_video_device_realize(DeviceState *dev, Error **errp)
     }
 
     /* TODO Implement VIDEO_ENC, currently only support VIDEO_DEC */
-    virtio_init(vdev, VIRTIO_ID_VIDEO_DEC, sizeof(struct virtio_video_config));
+    virtio_init(vdev, VIRTIO_ID_VIDEO_DECODER, sizeof(struct virtio_video_config));
 
     /* one command queue and one event queue */
     video->vhost_dev.nvqs = 2;
