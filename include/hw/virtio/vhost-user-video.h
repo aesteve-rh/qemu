@@ -9,6 +9,7 @@
 #ifndef _VHOST_USER_VIDEO_H_
 #define _VHOST_USER_VIDEO_H_
 
+#include "standard-headers/linux/virtio_ids.h"
 #include "standard-headers/linux/virtio_video.h"
 #include "hw/virtio/virtio.h"
 #include "hw/virtio/vhost.h"
