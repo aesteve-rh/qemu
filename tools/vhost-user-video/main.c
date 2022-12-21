@@ -1431,6 +1431,9 @@ video_handle_ctrl(VuDev *dev, int qidx)
         cmd->cmd_hdr = (struct virtio_video_cmd_hdr *) cmd->cmd_buf;
         /*bswap header */
         virtio_video_ctrl_hdr_letoh(cmd->cmd_hdr);
+        
+        g_debug("%s: received command type: %u",
+                __func__, cmd->cmd_hdr->type);
 
         switch (cmd->cmd_hdr->type) {
         case VIRTIO_VIDEO_CMD_QUERY_CAPABILITY:
@@ -1467,10 +1470,12 @@ video_handle_ctrl(VuDev *dev, int qidx)
             handle_queue_clear_cmd(video, cmd);
             break;
         case VIRTIO_VIDEO_CMD_GET_PARAMS:
+        case VIRTIO_VIDEO_CMD_GET_PARAMS_EXT:
             g_debug("Received VIRTIO_VIDEO_CMD_GET_PARAMS cmd");
             handle_get_params_cmd(video, cmd);
             break;
         case VIRTIO_VIDEO_CMD_SET_PARAMS:
+        case VIRTIO_VIDEO_CMD_SET_PARAMS_EXT:
             g_debug("Received VIRTIO_VIDEO_CMD_SET_PARAMS cmd");
             handle_set_params_cmd(video, cmd);
             break;
