@@ -1467,10 +1467,12 @@ video_handle_ctrl(VuDev *dev, int qidx)
             handle_queue_clear_cmd(video, cmd);
             break;
         case VIRTIO_VIDEO_CMD_GET_PARAMS:
+        case VIRTIO_VIDEO_CMD_GET_PARAMS_EXT:
             g_debug("Received VIRTIO_VIDEO_CMD_GET_PARAMS cmd");
             handle_get_params_cmd(video, cmd);
             break;
         case VIRTIO_VIDEO_CMD_SET_PARAMS:
+        case VIRTIO_VIDEO_CMD_SET_PARAMS_EXT:
             g_debug("Received VIRTIO_VIDEO_CMD_SET_PARAMS cmd");
             handle_set_params_cmd(video, cmd);
             break;
