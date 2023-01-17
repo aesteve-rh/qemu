@@ -752,7 +752,7 @@ int v4l2_resource_create(struct stream *s, enum v4l2_buf_type type,
     if (mem_type == VIRTIO_VIDEO_MEM_TYPE_GUEST_PAGES) {
         reqbuf.memory = V4L2_MEMORY_USERPTR;
     } else if (mem_type == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT) {
-        /* TODO */
+        /* TODO reqbuf.memory = V4L2_MEMORY_DMABUF; */
         g_error("%s: VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT not implemented\n"
                 , __func__);
         ret = -EINVAL;
@@ -857,8 +857,6 @@ int v4l2_streamon(struct v4l2_device *dev, enum v4l2_buf_type type,
                   struct stream *s)
 {
     int ret = 0;
-    bool is_mplane = video_is_mplane(type);
-    enum v4l2_buf_type type2;
 
     if (!s->subscribed_events) {
         /* subscribe for SOURCE_CHANGE event */
@@ -883,12 +881,6 @@ int v4l2_streamon(struct v4l2_device *dev, enum v4l2_buf_type type,
         if (s->output_streaming == false) {
             ret |= ioctl_streamon(s, type);
         }
-
-        if (s->capture_streaming == false) {
-            type2 = is_mplane ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
-                V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            ret |= ioctl_streamon(s, type2);
-        }
         break;
 
     case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
@@ -896,11 +888,6 @@ int v4l2_streamon(struct v4l2_device *dev, enum v4l2_buf_type type,
     case V4L2_BUF_TYPE_META_CAPTURE:
         if (s->capture_streaming == false) {
             ret |= ioctl_streamon(s, type);
-        }
-        if (s->output_streaming == false) {
-            type2 = is_mplane ? V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE :
-                V4L2_BUF_TYPE_VIDEO_OUTPUT;
-            ret |= ioctl_streamon(s, type2);
         }
         break;
 
@@ -1059,7 +1046,7 @@ int v4l2_queue_buffer(int fd, enum v4l2_buf_type type,
             vbuf.m.planes[i].m.userptr = (unsigned long)res->iov[i].iov_base;
             vbuf.m.planes[i].length = (unsigned long)res->iov[i].iov_len;
         }
-    } else {
+    } else if (res->iov != NULL) {
         /* m is a union of userptr, *planes and fd */
         vbuf.m.userptr = (unsigned long)res->iov[0].iov_base;
         vbuf.length = res->iov[0].iov_len;
@@ -1123,7 +1110,7 @@ int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
     ret = ioctl(fd, VIDIOC_DQBUF, &vbuf);
     if (ret < 0) {
         g_printerr("Unable to DQBUF: %s (%d).\n", g_strerror(errno), errno);
-        return ret;
+        return -errno;
     }
 
     g_debug("%s: VIDIOC_DQBUF OK index(%d)!", __func__, vbuf.index);
@@ -1141,6 +1128,7 @@ int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
     r->queued = false;
     vio_cmd = r->vio_q_cmd;
 
+    resp.flags = 0x0;
     resp.hdr.stream_id = r->stream_id;
     resp.hdr.type = VIRTIO_VIDEO_RESP_OK_NODATA;
     resp.timestamp = htole64(r->vio_res_q.timestamp);
@@ -1234,7 +1222,7 @@ int v4l2_video_set_selection(int fd, enum v4l2_buf_type type,
 
     ret = ioctl(fd, VIDIOC_S_SELECTION, sel);
     if (ret < 0) {
-        g_printerr("Unable to set selection: fd=(%d) left=(%d) top=(%d)"
+        g_printerr("Unable to set selection: fd=(%d) left=(%d) top=(%d) "
                    "width=(%d) height=(%d): %s (%d).\n", fd, sel->r.left,
                    sel->r.top, sel->r.width, sel->r.height, g_strerror(errno),
                    errno);
