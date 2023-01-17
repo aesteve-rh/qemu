@@ -76,7 +76,7 @@ enum virtio_video_format {
 	VIRTIO_VIDEO_FORMAT_VP8, /* VP8 */
 	VIRTIO_VIDEO_FORMAT_VP9, /* VP9 */
 	VIRTIO_VIDEO_FORMAT_FWHT, /* FWHT used by vicodec */
-	VIRTIO_VIDEO_FORMAT_CODED_MAX = VIRTIO_VIDEO_FORMAT_VP9,
+	VIRTIO_VIDEO_FORMAT_CODED_MAX = VIRTIO_VIDEO_FORMAT_FWHT,
 };
 
 enum virtio_video_profile {
@@ -141,6 +141,11 @@ enum virtio_video_level {
 	VIRTIO_VIDEO_LEVEL_H264_MAX = VIRTIO_VIDEO_LEVEL_H264_5_1,
 };
 
+enum virtio_video_bitrate_mode {
+	VIRTIO_VIDEO_BITRATE_MODE_VBR = 0,
+	VIRTIO_VIDEO_BITRATE_MODE_CBR = 1,
+};
+
 /*
  * Config
  */
@@ -149,6 +154,7 @@ struct virtio_video_config {
 	__le32 version;
 	__le32 max_caps_length;
 	__le32 max_resp_length;
+	__u8 device_name[32];
 };
 
 /*
@@ -165,8 +171,9 @@ enum virtio_video_cmd_type {
 	VIRTIO_VIDEO_CMD_RESOURCE_QUEUE,
 	VIRTIO_VIDEO_CMD_RESOURCE_DESTROY_ALL,
 	VIRTIO_VIDEO_CMD_QUEUE_CLEAR,
-	VIRTIO_VIDEO_CMD_GET_PARAMS,
-	VIRTIO_VIDEO_CMD_SET_PARAMS,
+	/* GET/SET_PARAMS are being replaced with GET/SET_PARAMS_EXT */
+	VIRTIO_VIDEO_CMD_GET_PARAMS__UNUSED,
+	VIRTIO_VIDEO_CMD_SET_PARAMS__UNUSED,
 	VIRTIO_VIDEO_CMD_QUERY_CONTROL,
 	VIRTIO_VIDEO_CMD_GET_CONTROL,
 	VIRTIO_VIDEO_CMD_SET_CONTROL,
@@ -363,6 +370,8 @@ struct virtio_video_params {
 	__le32 frame_rate;
 	__le32 num_planes;
 	struct virtio_video_plane_format plane_formats[VIRTIO_VIDEO_MAX_PLANES];
+    __le32 resource_type; /* One of VIRTIO_VIDEO_MEM_TYPE_* types */
+    __u8 padding[4];
 };
 
 struct virtio_video_get_params {
@@ -388,6 +397,9 @@ enum virtio_video_control_type {
 	VIRTIO_VIDEO_CONTROL_PROFILE,
 	VIRTIO_VIDEO_CONTROL_LEVEL,
 	VIRTIO_VIDEO_CONTROL_FORCE_KEYFRAME,
+    VIRTIO_VIDEO_CONTROL_BITRATE_MODE,
+    VIRTIO_VIDEO_CONTROL_BITRATE_PEAK,
+    VIRTIO_VIDEO_CONTROL_PREPEND_SPSPPS_TO_IDR,
 };
 
 struct virtio_video_query_control_profile {
@@ -439,6 +451,16 @@ struct virtio_video_control_val_bitrate {
 	__u8 padding[4];
 };
 
+struct virtio_video_control_val_bitrate_peak {
+    __le32 bitrate_peak;
+    __u8 padding[4];
+};
+
+struct virtio_video_control_val_bitrate_mode {
+    __le32 bitrate_mode;
+    __u8 padding[4];
+};
+
 struct virtio_video_control_val_profile {
 	__le32 profile;
 	__u8 padding[4];
@@ -447,6 +469,11 @@ struct virtio_video_control_val_profile {
 struct virtio_video_control_val_level {
 	__le32 level;
 	__u8 padding[4];
+};
+
+struct virtio_video_control_val_prepend_spspps_to_idr {
+    __le32 prepend_spspps_to_idr;
+    __u8 padding[4];
 };
 
 struct virtio_video_get_control_resp {

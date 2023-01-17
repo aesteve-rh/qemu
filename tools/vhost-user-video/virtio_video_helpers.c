@@ -415,11 +415,11 @@ void v4l2_to_virtio_video_params(struct v4l2_device *dev,
 void v4l2_to_virtio_event(struct v4l2_event *ev,
                           struct virtio_video_event *vio_ev)
 {
-    g_debug("%s:%d", __func__, __LINE__);
-    g_debug("%ld.%06ld: event %u, pending %u: ",
-            ev->timestamp.tv_sec, ev->timestamp.tv_nsec / 1000,
+    g_debug("%s: %ld.%06ld: event %u, pending %u",
+            __func__, ev->timestamp.tv_sec, ev->timestamp.tv_nsec / 1000,
             ev->sequence, ev->pending);
-
+    /* Reset event type */
+    vio_ev->event_type = 0x0;
     switch (ev->type) {
     case V4L2_EVENT_VSYNC:
         g_debug("vsync\n");
