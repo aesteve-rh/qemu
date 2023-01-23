@@ -50,7 +50,7 @@ vhost-user-video --socket-path=/tmp/video.sock --v4l2-device=/dev/video3
 
 # Qemu command for virtio-video device
 
--device vhost-user-video-pci,chardev=video,id=video
+-device vhost-user-video-pci,chardev=video,dev_type=decoder,id=video
 -chardev socket,path=/tmp//video.sock,id=video
 
 # Example v4l2-ctl decode command
