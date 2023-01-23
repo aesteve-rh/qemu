@@ -1335,6 +1335,28 @@ int v4l2_video_get_format(int fd, enum v4l2_buf_type type,
     return 0;
 }
 
+int v4l2_video_query_control(int fd, uint32_t control, int32_t *value)
+{
+    int ret = 0;
+    struct v4l2_queryctrl ctrl;
+
+    g_debug("%s:%d", __func__, __LINE__);
+
+    ctrl.id = control;
+
+    ret = ioctl(fd, VIDIOC_QUERYCTRL, &ctrl);
+    if (ret < 0) {
+        g_printerr("Unable to query control: %s (%d).\n", g_strerror(errno),
+               errno);
+        return ret;
+    }
+
+    *value = ctrl.type;
+    g_debug("%s: ctrl=0x%x type=0x%x", __func__, control, *value);
+
+    return ret;
+}
+
 int v4l2_video_get_control(int fd , uint32_t control, int32_t *value)
 {
     int ret = 0;
