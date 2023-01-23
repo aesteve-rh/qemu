@@ -177,13 +177,17 @@ uint32_t virtio_video_v4l2_format_to_virtio(uint32_t v4l2_format)
  * e.g. https://elixir.bootlin.com/linux/v5.12.1/source/
  * include/uapi/linux/v4l2-controls.h#L669
  */
-static struct virtio_video_convert_table control_table[] = {
-    { VIRTIO_VIDEO_CONTROL_BITRATE, V4L2_CID_MPEG_VIDEO_BITRATE },
-    { VIRTIO_VIDEO_CONTROL_PROFILE, V4L2_CID_MPEG_VIDEO_H264_PROFILE },
-    { VIRTIO_VIDEO_CONTROL_LEVEL, V4L2_CID_MPEG_VIDEO_H264_LEVEL },
-    { VIRTIO_VIDEO_CONTROL_FORCE_KEYFRAME,
-      V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME },
-    { 0 },
+static struct virtio_video_convert_table control_table[] = {                                                                                                                                                                                                                                                                 
+    { VIRTIO_VIDEO_CONTROL_BITRATE, V4L2_CID_MPEG_VIDEO_BITRATE },                                                                                                                                                                                                                                                           
+    { VIRTIO_VIDEO_CONTROL_BITRATE_PEAK, V4L2_CID_MPEG_VIDEO_BITRATE_PEAK },                                                                                                                                                                                                                                                 
+    { VIRTIO_VIDEO_CONTROL_BITRATE_MODE, V4L2_CID_MPEG_VIDEO_BITRATE_MODE },                                                                                                                                                                                                                                                 
+    { VIRTIO_VIDEO_CONTROL_PROFILE, V4L2_CID_MPEG_VIDEO_H264_PROFILE },                                                                                                                                                                                                                                                      
+    { VIRTIO_VIDEO_CONTROL_LEVEL, V4L2_CID_MPEG_VIDEO_H264_LEVEL },                                                                                                                                                                                                                                                          
+    { VIRTIO_VIDEO_CONTROL_FORCE_KEYFRAME,                                                                                                                                                                                                                                                                                   
+            V4L2_CID_MPEG_VIDEO_FORCE_KEY_FRAME },                                                                                                                                                                                                                                                                           
+    { VIRTIO_VIDEO_CONTROL_PREPEND_SPSPPS_TO_IDR,                                                                                                                                                                                                                                                                            
+            V4L2_CID_MPEG_VIDEO_PREPEND_SPSPPS_TO_IDR },                                                                                                                                                                                                                                                                     
+    { 0 },                                                                                                                                                                                                                                                                                                                   
 };
 
 uint32_t virtio_video_control_to_v4l2(uint32_t control)
