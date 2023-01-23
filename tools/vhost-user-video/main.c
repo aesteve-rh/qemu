@@ -821,7 +821,7 @@ handle_resource_create_cmd(struct VuVideo *v,
             goto out_unlock;
         }
 
-        g_debug("%s: resource=%p streamid(%d) resourceid(%d) numplanes(%d)"
+        g_debug("%s: resource=%p streamid(%d) resourceid(%d) numplanes(%d) "
                 "planes_layout(0x%x) %s",
                 __func__, res, res->stream_id, r->resource_id, r->num_planes,
                 r->planes_layout, vio_queue_name(r->queue_type));
@@ -1242,6 +1242,88 @@ struct virtio_video_get_control_resp_bitrate {
 };
 
 static int
+handle_query_control_cmd(struct VuVideo *v,
+                         struct vu_video_ctrl_command *cmd)
+{
+    int ret;
+    uint32_t v4l2_control;
+    int32_t value;
+
+    struct virtio_video_query_control_resp ctl_resp;
+
+    struct virtio_video_query_control *qcmd =
+        (struct virtio_video_query_control *)cmd->cmd_buf;
+
+    g_debug("%s: type(0x%x) stream_id(%d) control(0x%x)", __func__,
+            qcmd->hdr.type, qcmd->hdr.stream_id, le32toh(qcmd->control));
+
+    v4l2_control = virtio_video_control_to_v4l2(le32toh(qcmd->control));
+    if (!v4l2_control) {
+        goto out_err_unlock;
+    }
+
+
+    ctl_resp.hdr.stream_id = qcmd->hdr.stream_id;
+    ctl_resp.hdr.type = VIRTIO_VIDEO_RESP_OK_QUERY_CONTROL;
+
+    switch (le32toh(qcmd->control)) {
+    case VIRTIO_VIDEO_CONTROL_PROFILE:
+        struct virtio_video_query_control_resp_profile *ctl_resp_profile;
+        ctl_resp_profile = (void *)&ctl_resp + sizeof(struct virtio_video_query_control_resp_profile);
+
+        g_debug("%s: VIRTIO_VIDEO_CONTROL_PROFILE", __func__);
+
+        ret = v4l2_video_query_control(v->v4l2_dev->fd, v4l2_control, &value);
+        if (ret < 0) {
+            g_printerr("v4l2_video_query_control() failed\n");
+            goto out_err_unlock;
+        }
+
+        ctl_resp_profile->num = htole32(value);
+
+        cmd->finished = true;
+        send_ctrl_response(cmd, (uint8_t *)&ctl_resp_profile,
+                           sizeof(ctl_resp_profile));
+
+        break;
+
+    case VIRTIO_VIDEO_CONTROL_LEVEL:
+        struct virtio_video_query_control_resp_level *ctl_resp_level;
+        ctl_resp_level = (void *)&ctl_resp + sizeof(struct virtio_video_query_control_resp_level);
+
+        g_debug("%s: VIRTIO_VIDEO_CONTROL_LEVEL", __func__);
+
+        ret = v4l2_video_query_control(v->v4l2_dev->fd, v4l2_control, &value);
+        if (ret < 0) {
+            g_printerr("v4l2_video_query_control() failed\n");
+            goto out_err_unlock;
+        }
+
+        ctl_resp_level->num = htole32(value);
+
+        cmd->finished = true;
+        send_ctrl_response(cmd, (uint8_t *)&ctl_resp_level,
+                           sizeof(ctl_resp_profile));
+        break;
+
+    default:
+        g_critical("Unknown control requested!");
+        goto out_err_unlock;
+        break;
+    }
+
+    return 0;
+
+out_err_unlock:
+    ctl_resp.hdr.stream_id = qcmd->hdr.stream_id;
+    ctl_resp.hdr.type = VIRTIO_VIDEO_RESP_ERR_UNSUPPORTED_CONTROL;
+    cmd->finished = true;
+    send_ctrl_response(cmd, (uint8_t *)&ctl_resp,
+                       sizeof(struct virtio_video_query_control_resp));
+    return -EINVAL;
+}
+
+static int
 handle_get_control_cmd(struct VuVideo *v, struct vu_video_ctrl_command *vio_cmd)
 {
     int ret;
@@ -1255,8 +1337,8 @@ handle_get_control_cmd(struct VuVideo *v, struct vu_video_ctrl_command *vio_cmd)
 
     struct stream *s;
 
-    struct virtio_video_query_control *cmd =
-        (struct virtio_video_query_control *)vio_cmd->cmd_buf;
+    struct virtio_video_get_control *cmd =
+        (struct virtio_video_get_control *)vio_cmd->cmd_buf;
 
     g_debug("%s: type(0x%x) stream_id(%d) control(0x%x)", __func__,
             cmd->hdr.type, cmd->hdr.stream_id, le32toh(cmd->control));
@@ -1342,6 +1424,13 @@ handle_get_control_cmd(struct VuVideo *v, struct vu_video_ctrl_command *vio_cmd)
         vio_cmd->finished = true;
         send_ctrl_response(vio_cmd, (uint8_t *)&ctl_resp_level,
                            sizeof(struct virtio_video_get_control_resp_level));
+        break;
+
+    case VIRTIO_VIDEO_CONTROL_BITRATE_MODE:
+    case VIRTIO_VIDEO_CONTROL_BITRATE_PEAK:
+    case VIRTIO_VIDEO_CONTROL_PREPEND_SPSPPS_TO_IDR:
+        g_info("Unsupported control requested");
+        goto out_err_unlock;
         break;
 
     default:
@@ -1481,7 +1570,8 @@ video_handle_ctrl(VuDev *dev, int qidx)
             handle_set_params_cmd(video, cmd);
             break;
         case VIRTIO_VIDEO_CMD_QUERY_CONTROL:
-            g_error("**** VIRTIO_VIDEO_CMD_QUERY_CONTROL unimplemented!");
+            g_debug("Received VIRTIO_VIDEO_CMD_QUERY_CONTROL cmd");
+            handle_query_control_cmd(video, cmd);
             break;
         case VIRTIO_VIDEO_CMD_GET_CONTROL:
             g_debug("Received VIRTIO_VIDEO_CMD_GET_CONTROL cmd");
