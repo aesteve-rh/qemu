@@ -43,6 +43,7 @@ int v4l2_video_get_format(int fd, enum v4l2_buf_type type,
 int v4l2_video_set_format(int fd, enum v4l2_buf_type type,
                           struct virtio_video_params *p);
 
+int v4l2_video_query_control(int fd, uint32_t control, int32_t *value);
 int v4l2_video_get_control(int fd, uint32_t control, int32_t *value);
 
 int v4l2_queue_buffer(int fd, enum v4l2_buf_type type,
