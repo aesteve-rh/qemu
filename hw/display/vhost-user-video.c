@@ -75,7 +75,8 @@ static void vhost_user_video_start(VirtIODevice *vdev)
 
     video->vhost_dev.acked_features = vdev->guest_features;
 
-    ret = vhost_dev_start(&video->vhost_dev, vdev);
+    video->vhost_dev.vq_index_end = video->vhost_dev.nvqs;
+    ret = vhost_dev_start(&video->vhost_dev, vdev, true);
     if (ret < 0) {
         error_report("Error starting vhost-user-video: %d", -ret);
         goto err_guest_notifiers;
@@ -109,7 +110,7 @@ static void vhost_user_video_stop(VirtIODevice *vdev)
         return;
     }
 
-    vhost_dev_stop(&video->vhost_dev, vdev);
+    vhost_dev_stop(&video->vhost_dev, vdev, true);
 
     ret = k->set_guest_notifiers(qbus->parent, video->vhost_dev.nvqs, false);
     if (ret < 0) {
@@ -163,12 +164,34 @@ static void vhost_user_video_guest_notifier_mask(VirtIODevice *vdev, int idx,
                                             bool mask)
 {
     VHostUserVIDEO *video = VHOST_USER_VIDEO(vdev);
+
+    /*
+     * Add the check for configure interrupt, Use VIRTIO_CONFIG_IRQ_IDX -1
+     * as the Marco of configure interrupt's IDX, If this driver does not
+     * support, the function will return
+     */
+
+    if (idx == VIRTIO_CONFIG_IRQ_IDX) {
+        return;
+    }
+
     vhost_virtqueue_mask(&video->vhost_dev, vdev, idx, mask);
 }
 
 static bool vhost_user_video_guest_notifier_pending(VirtIODevice *vdev, int idx)
 {
     VHostUserVIDEO *video = VHOST_USER_VIDEO(vdev);
+
+    /*
+     * Add the check for configure interrupt, Use VIRTIO_CONFIG_IRQ_IDX -1
+     * as the Marco of configure interrupt's IDX, If this driver does not
+     * support, the function will return
+     */
+
+    if (idx == VIRTIO_CONFIG_IRQ_IDX) {
+        return false;
+    }
+
     return vhost_virtqueue_pending(&video->vhost_dev, idx);
 }
 
@@ -291,6 +314,7 @@ static void vhost_user_video_device_realize(DeviceState *dev, Error **errp)
     video->vhost_dev.nvqs = 2;
     video->vhost_dev.vqs = g_new0(struct vhost_virtqueue,
                                   video->vhost_dev.nvqs);
+    video->vhost_dev.vq_index = 0;
 
     ret = vhost_dev_init(&video->vhost_dev, &video->vhost_user,
                          VHOST_BACKEND_TYPE_USER, 0, errp);
