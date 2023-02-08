@@ -14,6 +14,8 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include "qemu/osdep.h"
+
 #include <linux/videodev2.h>
 
 #include <glib.h>
@@ -659,8 +661,8 @@ void v4l2_set_device_type(struct v4l2_device *dev, enum v4l2_buf_type type,
     }
 }
 
-enum v4l2_buf_type get_v4l2_buf_type (enum virtio_video_queue_type queue_type,
-                                      bool has_mplane)
+enum v4l2_buf_type get_v4l2_buf_type(enum virtio_video_queue_type queue_type,
+                                     bool has_mplane)
 {
     enum v4l2_buf_type buf_type = V4L2_BUF_TYPE_PRIVATE;
 
@@ -684,19 +686,36 @@ enum v4l2_buf_type get_v4l2_buf_type (enum virtio_video_queue_type queue_type,
     return buf_type;
 }
 
-int v4l2_free_buffers(int fd, enum v4l2_buf_type type)
+enum v4l2_memory get_v4l2_memory(enum virtio_video_mem_type mem_type)
 {
-    struct v4l2_requestbuffers reqbuf;
-    int ret;
+    /* if using GUEST_PAGES queued using USERPTR mechanism */
+    enum v4l2_memory memory = V4L2_MEMORY_USERPTR;
+    if (mem_type == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT) {
+        memory = V4L2_MEMORY_DMABUF;
+    } else {
+        assert(mem_type == VIRTIO_VIDEO_MEM_TYPE_GUEST_PAGES);
+    }
+
+    g_debug("%s: mem_type(0x%x) memory(0x%x)", __func__, mem_type, memory);
+    return memory;
+}
+
+enum virtio_video_mem_type
+get_queue_mem_type(struct stream *s,
+                   enum virtio_video_queue_type queue_type)
+{
+    if (queue_type == VIRTIO_VIDEO_QUEUE_TYPE_INPUT) {
+        return s->vio_stream.in_mem_type;
+    } else {
+        return s->vio_stream.out_mem_type;
+    }
+}
+
+int v4l2_free_buffers(int fd, enum v4l2_buf_type type, enum v4l2_memory memory)
+{
+    int ret, count = 0;
     g_debug("%s: v4l2_buf_type: %s: Issuing REQBUFS 0"
             , __func__, v4l2_buf_type_name(type));
-
-    memset(&reqbuf, 0, sizeof(reqbuf));
-    reqbuf.type = type;
-    reqbuf.count = 0;
-
-    /*TODO must save this when creating resource on queue */
-    reqbuf.memory = V4L2_MEMORY_USERPTR;
 
     /*
      * Applications can call ioctl VIDIOC_REQBUFS again to change the number
@@ -712,6 +731,55 @@ int v4l2_free_buffers(int fd, enum v4l2_buf_type type)
      */
 
     /* TODO support V4L2_BUF_CAP_SUPPORTS_ORPHANED_BUFS */
+    ret = v4l2_reqbuf(fd, type, memory, &count);
+    if (ret == -1) {
+        goto out;
+    }
+
+out:
+    return ret;
+}
+
+int v4l2_resource_create(struct stream *s, enum v4l2_buf_type type,
+                         enum v4l2_memory memory,
+                         struct resource *res)
+{
+    int ret, count;
+    g_debug("%s: v4l2_buf_type: %s", __func__, v4l2_buf_type_name(type));
+
+    if (is_output_queue(type)) {
+        count = s->output_bufcount + 1;
+    } else if (is_capture_queue(type)) {
+        count = s->capture_bufcount + 1;
+    }
+
+    ret = v4l2_reqbuf(s->fd, type, memory, &count);
+    if (ret == -1) {
+        goto out;
+    }
+
+    if (is_output_queue(type)) {
+        s->output_bufcount = count;
+        res->v4l2_index = count - 1;
+    } else if (is_capture_queue(type)) {
+        s->capture_bufcount = count;
+        res->v4l2_index = count - 1;
+    }
+
+    res->type = type;
+out:
+    return ret;
+}
+
+int v4l2_reqbuf(int fd, enum v4l2_buf_type type, enum v4l2_memory memory, int *count)
+{
+    int ret;
+    struct v4l2_requestbuffers reqbuf;
+
+    memset(&reqbuf, 0, sizeof(reqbuf));
+    reqbuf.type = type;
+    reqbuf.memory = memory;
+    reqbuf.count = *count;
 
     ret = ioctl(fd, VIDIOC_REQBUFS, &reqbuf);
     if (ret == -1) {
@@ -724,59 +792,12 @@ int v4l2_free_buffers(int fd, enum v4l2_buf_type type)
         }
         goto out;
     }
+
+    *count = reqbuf.count;
+
     g_debug("%s: VIDIOC_REQBUFS capabilities(0x%x) granted(%d)"
             , __func__, reqbuf.capabilities, reqbuf.count);
 
-out:
-    return ret;
-}
-
-int v4l2_resource_create(struct stream *s, enum v4l2_buf_type type,
-                         enum virtio_video_mem_type mem_type,
-                         struct resource *res)
-{
-    struct v4l2_requestbuffers reqbuf;
-    int ret;
-    g_debug("%s: v4l2_buf_type: %s", __func__, v4l2_buf_type_name(type));
-
-    memset(&reqbuf, 0, sizeof(reqbuf));
-    reqbuf.type = type;
-    reqbuf.count = 1;
-
-    if (is_output_queue(type)) {
-        reqbuf.count = s->output_bufcount + 1;
-    } else if (is_capture_queue(type)) {
-        reqbuf.count = s->capture_bufcount + 1;
-    }
-
-    if (mem_type == VIRTIO_VIDEO_MEM_TYPE_GUEST_PAGES) {
-        reqbuf.memory = V4L2_MEMORY_USERPTR;
-    } else if (mem_type == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT) {
-        /* TODO reqbuf.memory = V4L2_MEMORY_DMABUF; */
-        g_error("%s: VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT not implemented\n"
-                , __func__);
-        ret = -EINVAL;
-        goto out;
-    }
-
-    ret = ioctl(s->fd, VIDIOC_REQBUFS, &reqbuf);
-    if (ret == -1) {
-        g_printerr("VIDIOC_REQBUFS failed: %s (%d)\n"
-                   , g_strerror(errno), errno);
-        goto out;
-    }
-    g_debug("%s: VIDIOC_REQBUFS capabilities(0x%x) granted(%d)!"
-            , __func__, reqbuf.capabilities, reqbuf.count);
-
-    if (is_output_queue(type)) {
-        s->output_bufcount = reqbuf.count;
-        res->v4l2_index = reqbuf.count - 1;
-    } else if (is_capture_queue(type)) {
-        s->capture_bufcount = reqbuf.count;
-        res->v4l2_index = reqbuf.count - 1;
-    }
-
-    res->type = type;
 out:
     return ret;
 }
@@ -1013,51 +1034,82 @@ void v4l2_print_event(const struct v4l2_event *ev)
     }
 }
 
-int v4l2_queue_buffer(int fd, enum v4l2_buf_type type,
+int v4l2_queue_buffer(enum v4l2_buf_type type,
+                      enum v4l2_memory memory,
                       struct virtio_video_resource_queue *qcmd,
                       struct resource *res, struct stream *s,
-                      struct v4l2_device *dev)
+                      struct v4l2_device *dev, struct vuvbm_device *bm_dev)
 {
     struct v4l2_buffer vbuf;
     int ret = 0;
+    int fd = s->fd;
 
     memset(&vbuf, 0, sizeof(vbuf));
     vbuf.index = res->v4l2_index;
 
     vbuf.type = type;
+    vbuf.memory = memory;
     vbuf.field = V4L2_FIELD_NONE;
     vbuf.flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 
-    g_debug("%s: type=%s index=%d", __func__,
-            v4l2_buf_type_name(type), vbuf.index);
+    g_debug("%s: type=%s memory=%d index=%d", __func__,
+            v4l2_buf_type_name(type), memory, vbuf.index);
 
     convert_to_timeval(le64toh(qcmd->timestamp), &vbuf.timestamp);
 
-    /* if using GUEST_PAGES queued using USERPTR mechanism */
-    vbuf.memory = V4L2_MEMORY_USERPTR;
+    if (memory == V4L2_MEMORY_USERPTR) {
+        if (video_is_mplane(type)) {
+            /* for mplane length field is number of elements in planes array */
+            vbuf.length = res->vio_resource.num_planes;
+            vbuf.m.planes = g_malloc0(sizeof(struct v4l2_plane)
+                                    * res->vio_resource.num_planes);
 
-    if (video_is_mplane(type)) {
-        /* for mplane length field is number of elements in planes array */
-        vbuf.length = res->vio_resource.num_planes;
-        vbuf.m.planes = g_malloc0(sizeof(struct v4l2_plane)
-                                  * res->vio_resource.num_planes);
-
-        for (int i = 0; i < vbuf.length; i++) {
-            vbuf.m.planes[i].m.userptr = (unsigned long)res->iov[i].iov_base;
-            vbuf.m.planes[i].length = (unsigned long)res->iov[i].iov_len;
+            for (int i = 0; i < vbuf.length; i++) {
+                vbuf.m.planes[i].m.userptr = (unsigned long)res->iov[i].iov_base;
+                vbuf.m.planes[i].length = (unsigned long)res->iov[i].iov_len;
+            }
+        } else if (res->iov != NULL) {
+            vbuf.m.userptr = (unsigned long)res->iov[0].iov_base;
+            vbuf.length = res->iov[0].iov_len;
+            g_debug("%s: iov_base = 0x%p", __func__, res->iov[0].iov_base);
+            g_debug("%s: iov_len = 0x%lx", __func__, res->iov[0].iov_len);
         }
-    } else if (res->iov != NULL) {
-        /* m is a union of userptr, *planes and fd */
-        vbuf.m.userptr = (unsigned long)res->iov[0].iov_base;
-        vbuf.length = res->iov[0].iov_len;
-        g_debug("%s: iov_base = 0x%p", __func__, res->iov[0].iov_base);
-        g_debug("%s: iov_len = 0x%lx", __func__, res->iov[0].iov_len);
-    }
+    } else {
+        assert(memory == V4L2_MEMORY_DMABUF);
+        if (video_is_mplane(type)) {
+            /* 
+             * TODO: implement support for MPLANE with DMABUF
+             * when setup with HW codec is in place.
+             */
+            g_printerr("MPLANE not supported with DMABUF memory.");
+            return ret;
+        } else {
+            if (!res->buf) {
+                struct VuVideoDMABuf *buf = vuvbm_lookup(bm_dev, res->uuid);
+                if (!buf) {
+                    g_debug("Buffer not found. Creating.");
+                    if (-1 == ioctl (fd, VIDIOC_QUERYBUF, &vbuf)) {
+                        g_printerr("VIDIOC_QUERYBUF failed: %s (%d)\n",
+                                g_strerror(errno), errno);
+                        return ret;
+                    }
 
-    ret = v4l2_streamon(dev, type, s);
-    if (ret < 0) {
-        g_printerr("v4l2_streamon failed (%d)", ret);
-        /* only print error, as v4l2_streamon() does both queues */
+                    g_debug("%s: VIDIOC_QUERYBUF OK", __func__);
+                    
+                    buf = g_new0(struct VuVideoDMABuf, 1);
+                    if (!vuvbm_buffer_create(bm_dev, buf, vbuf.length)) {
+                        g_warning("Buffer create failed.");
+                        return ret;
+                    }
+                    g_debug("Inserting buffer into the table.");
+                    g_hash_table_insert(bm_dev->resource_uuids, buf, &res->uuid);
+                }
+                res->buf = buf;
+                g_debug("Buffer found.");
+                res->buf->dev->unmap_bm(res->buf);
+            }
+            vbuf.m.fd = res->buf->dev->get_fd(res->buf);
+        }
     }
 
     ret = ioctl(fd, VIDIOC_QBUF, &vbuf);
@@ -1065,6 +1117,12 @@ int v4l2_queue_buffer(int fd, enum v4l2_buf_type type,
         qcmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_PARAMETER;
         g_printerr("Unable to QBUF: %s (%d).\n", g_strerror(errno), errno);
         return ret;
+    }
+
+    ret = v4l2_streamon(dev, type, s);
+    if (ret < 0) {
+        g_printerr("v4l2_streamon failed (%d)", ret);
+        /* only print error, as v4l2_streamon() does both queues */
     }
 
     res->queued = true;
@@ -1082,6 +1140,7 @@ int v4l2_queue_buffer(int fd, enum v4l2_buf_type type,
 }
 
 int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
+                        enum v4l2_memory memory,
                         struct stream *s)
 {
     struct v4l2_buffer vbuf;
@@ -1093,7 +1152,7 @@ int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
     memset(&vbuf, 0, sizeof(vbuf));
 
     vbuf.type = type;
-    vbuf.memory =  V4L2_MEMORY_USERPTR;
+    vbuf.memory = memory;
 
     vbuf.field = V4L2_FIELD_NONE;
     vbuf.flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
