@@ -408,6 +408,9 @@ void remove_all_resources(struct stream *s, uint32_t queue_type)
 
             /* free resource memory allocated in resource_create() */
             g_free(r->iov);
+            if (r->buf != NULL) {
+                vuvbm_buffer_destroy(r->buf);
+            }
             g_free(r);
             *resource_list = g_list_delete_link(*resource_list, l);
         }
@@ -587,7 +590,11 @@ static void *stream_worker_thread(gpointer data)
                 buf_type = s->has_mplane ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
                     : V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-                ret = v4l2_dequeue_buffer(s->fd, buf_type, s);
+                enum virtio_video_mem_type mem_type = \
+                    get_queue_mem_type(s, VIRTIO_VIDEO_QUEUE_TYPE_INPUT);
+                enum v4l2_memory memory = get_v4l2_memory(mem_type);
+
+                ret = v4l2_dequeue_buffer(s->fd, buf_type, memory, s);
                 if (ret < 0) {
                     g_info("%s: v4l2_dequeue_buffer() failed CAPTURE ret(%d)"
                            , __func__, ret);
@@ -604,7 +611,11 @@ static void *stream_worker_thread(gpointer data)
                 buf_type = s->has_mplane ? V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
                     : V4L2_BUF_TYPE_VIDEO_OUTPUT;
 
-                ret = v4l2_dequeue_buffer(s->fd, buf_type, s);
+                enum virtio_video_mem_type mem_type = \
+                    get_queue_mem_type(s, VIRTIO_VIDEO_QUEUE_TYPE_OUTPUT);
+                enum v4l2_memory memory = get_v4l2_memory(mem_type);
+
+                ret = v4l2_dequeue_buffer(s->fd, buf_type, memory, s);
                 if (ret < 0) {
                     g_info("%s: v4l2_dequeue_buffer() failed OUTPUT ret(%d)"
                            , __func__, ret);
@@ -849,18 +860,7 @@ handle_resource_create_cmd(struct VuVideo *v,
      *   for VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT
      */
 
-    if (r->queue_type == VIRTIO_VIDEO_QUEUE_TYPE_INPUT) {
-        mem_type = s->vio_stream.in_mem_type;
-    } else {
-        mem_type = s->vio_stream.out_mem_type;
-    }
-    /*
-     * Followed by either
-     * - struct virtio_video_mem_entry entries[]
-     *   for VIRTIO_VIDEO_MEM_TYPE_GUEST_PAGES
-     * - struct virtio_video_object_entry entries[]
-     *   for VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT
-     */
+    mem_type = get_queue_mem_type(s, r->queue_type);
 
     if (mem_type == VIRTIO_VIDEO_MEM_TYPE_GUEST_PAGES) {
         struct virtio_video_mem_entry *ent;
@@ -883,17 +883,20 @@ handle_resource_create_cmd(struct VuVideo *v,
         res->iov_count = total_entries;
 
     } else if (mem_type == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT) {
-        g_critical("%s: VIRTIO_OBJECT not implemented!", __func__);
-        /* TODO implement VIRTIO_OBJECT support */
-        cmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_PARAMETER;
-        goto out_unlock;
+        struct virtio_video_object_entry *ent;
+        ent = (void *)cmd + sizeof(struct virtio_video_resource_create);
+
+        memcpy(&res->uuid, ent->uuid, sizeof(ent->uuid));
+        g_debug("%s: create resource uuid(%s)",
+                   __func__, qemu_uuid_unparse_strdup(&res->uuid));
+
+        vuvbm_init_device(v->bm_dev);
     }
 
-    /* check underlying driver supports GUEST_PAGES */
     enum v4l2_buf_type buf_type =
         get_v4l2_buf_type(r->queue_type, s->has_mplane);
 
-    ret = v4l2_resource_create(s, buf_type, mem_type, res);
+    ret = v4l2_resource_create(s, buf_type, get_v4l2_memory(mem_type), res);
     if (ret < 0) {
         cmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_PARAMETER;
         goto out_unlock;
@@ -962,9 +965,10 @@ handle_resource_queue_cmd(struct VuVideo *v,
 
     enum v4l2_buf_type buf_type = get_v4l2_buf_type(
         cmd->queue_type, s->has_mplane);
+    enum virtio_video_mem_type mem_type = get_queue_mem_type(s, cmd->queue_type);
+    enum v4l2_memory memory = get_v4l2_memory(mem_type);
 
-
-    ret = v4l2_queue_buffer(s->fd, buf_type, cmd, res, s, v->v4l2_dev);
+    ret = v4l2_queue_buffer(buf_type, memory, cmd, res, s, v->v4l2_dev, v->bm_dev);
     if (ret < 0) {
         g_critical("%s: v4l2_queue_buffer failed", __func__);
         /* virtio error set by v4l2_queue_buffer */
@@ -1013,8 +1017,9 @@ handle_resource_destroy_all_cmd(struct VuVideo *v,
     g_mutex_lock(&s->mutex);
 
     buf_type = get_v4l2_buf_type(le32toh(cmd->queue_type), s->has_mplane);
+    enum virtio_video_mem_type mem_type = get_queue_mem_type(s, cmd->queue_type);
 
-    ret = v4l2_free_buffers(s->fd, buf_type);
+    ret = v4l2_free_buffers(s->fd, buf_type, get_v4l2_memory(mem_type));
     if (ret) {
         g_critical("%s: v4l2_free_buffers() failed", __func__);
         cmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_PARAMETER;
@@ -1052,14 +1057,6 @@ handle_stream_create_cmd(struct VuVideo *v,
 
     req_stream_id = cmd->hdr.stream_id;
     coded_format = le32toh(cmd->coded_format);
-
-    if ((le32toh(cmd->in_mem_type) == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT) ||
-        (le32toh(cmd->out_mem_type) == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT)) {
-        /* TODO implement VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT */
-        g_printerr("%s: MEM_TYPE_VIRTIO_OBJECT not supported yet", __func__);
-        cmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_PARAMETER;
-        goto out;
-    }
 
     if (!find_stream(v, req_stream_id)) {
         s = g_new0(struct stream, 1);
@@ -1198,14 +1195,16 @@ handle_stream_destroy_cmd(struct VuVideo *v,
 
         /* stream worker thread now exited */
 
+        enum virtio_video_mem_type mem_type = \
+            get_queue_mem_type(s, VIRTIO_VIDEO_QUEUE_TYPE_INPUT);
         /* deallocate the buffers */
-        v4l2_free_buffers(s->fd, buftype);
+        v4l2_free_buffers(s->fd, buftype, get_v4l2_memory(mem_type));
         remove_all_resources(s, VIRTIO_VIDEO_QUEUE_TYPE_INPUT);
 
         buftype = s->has_mplane ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
             V4L2_BUF_TYPE_VIDEO_CAPTURE;
-
-        v4l2_free_buffers(s->fd, buftype);
+        mem_type = get_queue_mem_type(s, VIRTIO_VIDEO_QUEUE_TYPE_OUTPUT);
+        v4l2_free_buffers(s->fd, buftype, get_v4l2_memory(mem_type));
         remove_all_resources(s, VIRTIO_VIDEO_QUEUE_TYPE_OUTPUT);
 
         g_cond_clear(&s->stream_cond);
@@ -1641,7 +1640,7 @@ static void video_destroy(VuVideo *v)
     if (socket_path) {
         unlink(socket_path);
     }
-
+    vuvbm_device_destroy(v->bm_dev);
     v4l2_backend_free(v->v4l2_dev);
 }
 
@@ -1713,6 +1712,11 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
     }
+
+    /*
+     * Create a new Buffer Memory device to handle DMA buffers.
+     */
+    video.bm_dev = g_new0(struct vuvbm_device, 1);
 
     /*
      * Now create a vhost-user socket that we will receive messages

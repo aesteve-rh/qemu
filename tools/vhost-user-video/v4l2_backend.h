@@ -15,8 +15,6 @@
 #include "standard-headers/linux/virtio_video.h"
 #include "virtio_video_helpers.h"
 
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
-
 #define MAX_CAPS_LEN 4096
 #define MAX_FMT_DESCS 64
 
@@ -32,8 +30,13 @@ void v4l2_backend_free(struct v4l2_device *dev);
 
 GByteArray *create_query_cap_resp(struct virtio_video_query_capability *qcmd,
                             GList **fmt_l, GByteArray *querycapresp);
-enum v4l2_buf_type get_v4l2_buf_type (enum virtio_video_queue_type queue_type,
-                                      bool has_mplane);
+enum v4l2_buf_type get_v4l2_buf_type(enum virtio_video_queue_type queue_type,
+                                     bool has_mplane);
+enum v4l2_memory get_v4l2_memory(enum virtio_video_mem_type mem_type);
+enum virtio_video_mem_type
+get_queue_mem_type(struct stream *s,
+                   enum virtio_video_queue_type queue_type);
+
 
 void v4l2_set_device_type(struct v4l2_device *dev, enum v4l2_buf_type type,
                           struct v4l2_fmtdesc *fmt_desc);
@@ -46,12 +49,15 @@ int v4l2_video_set_format(int fd, enum v4l2_buf_type type,
 int v4l2_video_query_control(int fd, uint32_t control, int32_t *value);
 int v4l2_video_get_control(int fd, uint32_t control, int32_t *value);
 
-int v4l2_queue_buffer(int fd, enum v4l2_buf_type type,
+int v4l2_queue_buffer(enum v4l2_buf_type type,
+                      enum v4l2_memory memory,
                       struct virtio_video_resource_queue *qcmd,
                       struct resource *res, struct stream *s,
-                      struct v4l2_device *dev);
+                      struct v4l2_device *dev,
+                      struct vuvbm_device *bm_dev);
 
 int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
+                        enum v4l2_memory memory,
                         struct stream *s);
 
 int v4l2_dequeue_event(struct v4l2_device *dev);
@@ -60,8 +66,9 @@ int v4l2_set_pixel_format(int fd, enum v4l2_buf_type buf_type,
                           uint32_t pixelformat);
 int v4l2_release_buffers(int fd, enum v4l2_buf_type type);
 int v4l2_resource_create(struct stream *s, enum v4l2_buf_type type,
-                         enum virtio_video_mem_type mem_type,
+                         enum v4l2_memory memory,
                          struct resource *res);
+int v4l2_reqbuf(int fd, enum v4l2_buf_type type, enum v4l2_memory memory, int *count);
 int v4l2_subscribe_event(struct stream *s,
                          uint32_t event_type, uint32_t id);
 
@@ -93,7 +100,7 @@ int v4l2_streamoff(enum v4l2_buf_type type, struct stream *s);
 void v4l2_print_event(const struct v4l2_event *ev);
 int v4l2_open(const gchar *devname);
 int v4l2_close(int fd);
-int v4l2_free_buffers(int fd, enum v4l2_buf_type type);
+int v4l2_free_buffers(int fd, enum v4l2_buf_type type, enum v4l2_memory memory);
 void convert_to_timeval(uint64_t timestamp, struct timeval *t);
 int v4l2_issue_cmd(int fd,  uint32_t cmd, uint32_t flags);
 
