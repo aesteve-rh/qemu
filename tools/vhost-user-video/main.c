@@ -714,6 +714,18 @@ GList *get_resource_list(struct stream *s, uint32_t queue_type)
     }
 }
 
+bool all_resources_queued(struct stream *s, uint32_t queue_type)
+{
+    GList *resources = get_resource_list(s, queue_type);
+    for (; resources != NULL; resources = resources->next) {
+        struct resource *res = (struct resource *)resources->data;
+        if (!res->queued) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void send_ctrl_response(struct vu_video_ctrl_command *vio_cmd,
                        uint8_t *resp, size_t resp_len)
 {
@@ -1001,6 +1013,14 @@ handle_resource_queue_cmd(struct VuVideo *v,
         g_critical("%s: v4l2_queue_buffer failed", __func__);
         /* virtio error set by v4l2_queue_buffer */
         goto out_unlock;
+    }
+
+    if (all_resources_queued(s, le32toh(cmd->queue_type))) {
+        ret = v4l2_streamon(v->v4l2_dev, buf_type, s);
+        if (ret < 0) {
+            g_printerr("v4l2_streamon failed (%d)", ret);
+            /* only print error, as v4l2_streamon() does both queues */
+        }
     }
 
     /*
