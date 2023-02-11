@@ -1125,12 +1125,6 @@ int v4l2_queue_buffer(enum v4l2_buf_type type,
         return ret;
     }
 
-    ret = v4l2_streamon(dev, type, s);
-    if (ret < 0) {
-        g_printerr("v4l2_streamon failed (%d)", ret);
-        /* only print error, as v4l2_streamon() does both queues */
-    }
-
     res->queued = true;
     if (video_is_mplane(type)) {
         g_free(vbuf.m.planes);

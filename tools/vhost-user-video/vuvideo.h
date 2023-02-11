@@ -20,6 +20,8 @@
 size_t video_iov_size(const struct iovec *iov, const unsigned int iov_cnt);
 
 GList *get_resource_list(struct stream *s, uint32_t queue_type);
+bool all_resources_queued(struct stream *s, uint32_t queue_type);
+
 void send_qclear_res_reply(gpointer data, gpointer user_data);
 
 struct stream *find_stream(struct VuVideo *v, uint32_t stream_id);
