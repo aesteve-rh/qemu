@@ -1102,10 +1102,11 @@ int v4l2_queue_buffer(enum v4l2_buf_type type,
                 }
                 res->buf = buf;
                 g_debug("Buffer found.");
-                res->buf->dev->unmap_bm(res->buf);
             }
             vbuf.m.fd = res->buf->dev->get_fd(res->buf);
         }
+        // Copy virtio shared memory contents to DMA buffer
+        memcpy(res->buf->start, res->iov[0].iov_base, res->iov[0].iov_len);
     }
 
     if (V4L2_TYPE_IS_OUTPUT(type)) {
@@ -1183,6 +1184,9 @@ int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
         g_printerr("%s: Can't find resource for dequeued buffer!", __func__);
         return -EINVAL;
     }
+
+    // Copy virtio decoded DMA buffer contents to shared memory
+    memcpy(r->iov[0].iov_base, r->buf->start, r->iov[0].iov_len);
 
     r->queued = false;
     vio_cmd = r->vio_q_cmd;

@@ -889,7 +889,8 @@ handle_resource_create_cmd(struct VuVideo *v,
 
     mem_type = get_queue_mem_type(s, r->queue_type);
 
-    if (mem_type == VIRTIO_VIDEO_MEM_TYPE_GUEST_PAGES) {
+    if (mem_type == VIRTIO_VIDEO_MEM_TYPE_GUEST_PAGES ||
+            mem_type == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT) {
         struct virtio_video_mem_entry *ent;
         ent = (void *)cmd + sizeof(struct virtio_video_resource_create);
 
@@ -909,7 +910,13 @@ handle_resource_create_cmd(struct VuVideo *v,
         }
         res->iov_count = total_entries;
 
-    } else if (mem_type == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT) {
+        if (mem_type == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT) {
+            qemu_uuid_generate(&res->uuid);
+            g_debug("%s: create resource uuid(%s)",
+                    __func__, qemu_uuid_unparse_strdup(&res->uuid));
+            vuvbm_init_device(v->bm_dev);
+        }
+    }/* else if (mem_type == VIRTIO_VIDEO_MEM_TYPE_VIRTIO_OBJECT) {
         struct virtio_video_object_entry *ent;
         ent = (void *)cmd + sizeof(struct virtio_video_resource_create);
 
@@ -918,7 +925,7 @@ handle_resource_create_cmd(struct VuVideo *v,
                    __func__, qemu_uuid_unparse_strdup(&res->uuid));
 
         vuvbm_init_device(v->bm_dev);
-    }
+    }*/
 
     cmd->hdr.type = VIRTIO_VIDEO_RESP_OK_NODATA;
 
