@@ -1112,6 +1112,16 @@ int v4l2_queue_buffer(enum v4l2_buf_type type,
         }
     }
 
+    if (V4L2_TYPE_IS_OUTPUT(type)) {
+        if (video_is_mplane(type)) {
+            for (int i = 0; i < vbuf.length; i++) {
+                vbuf.m.planes[i].bytesused = vbuf.m.planes[i].length;
+            }
+        } else {
+            vbuf.bytesused = vbuf.length;
+        }
+    }
+
     ret = ioctl(fd, VIDIOC_QBUF, &vbuf);
     if (ret < 0) {
         qcmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_PARAMETER;
