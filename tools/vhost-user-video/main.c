@@ -824,6 +824,21 @@ handle_resource_create_cmd(struct VuVideo *v,
         res->vio_resource.num_planes = le32toh(cmd->num_planes);
         r = &res->vio_resource;
 
+        switch (le32toh(cmd->queue_type)) {
+            case VIRTIO_VIDEO_QUEUE_TYPE_INPUT:
+                res->v4l2_index = g_list_length(s->inputq_resources);
+                break;
+            case VIRTIO_VIDEO_QUEUE_TYPE_OUTPUT:
+                res->v4l2_index = g_list_length(s->outputq_resources);
+                break;
+            default:
+                g_critical("%s: invalid queue_type(%s) resource_id(%d)",
+                        __func__, vio_queue_name(r->queue_type),
+                        le32toh(cmd->resource_id));
+                cmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_RESOURCE_ID;
+                goto out_unlock;
+        }
+
         ret = add_resource(s, res, le32toh(cmd->queue_type));
         if (ret) {
             g_critical("%s: resource_add id:%d failed"
@@ -893,15 +908,6 @@ handle_resource_create_cmd(struct VuVideo *v,
         vuvbm_init_device(v->bm_dev);
     }
 
-    enum v4l2_buf_type buf_type =
-        get_v4l2_buf_type(r->queue_type, s->has_mplane);
-
-    ret = v4l2_resource_create(s, buf_type, get_v4l2_memory(mem_type), res);
-    if (ret < 0) {
-        cmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_PARAMETER;
-        goto out_unlock;
-    }
-
     cmd->hdr.type = VIRTIO_VIDEO_RESP_OK_NODATA;
 
 out_unlock:
@@ -945,6 +951,28 @@ handle_resource_queue_cmd(struct VuVideo *v,
         g_critical("%s: resource id 0 is not allowed", __func__);
         cmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_RESOURCE_ID;
         goto out_unlock;
+    }
+
+    if (le32toh(cmd->queue_type) == VIRTIO_VIDEO_QUEUE_TYPE_INPUT) {
+        if (g_list_length(s->inputq_resources) && !s->output_bufcount) {
+            ret = v4l2_resource_create(s, le32toh(cmd->queue_type),
+                                       g_list_length(s->inputq_resources));
+            if (ret < 0) {
+                g_critical("%s: output buffer allocation failed", __func__);
+                cmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_PARAMETER;
+                goto out_unlock;
+            }
+        }
+    } else {
+        if (g_list_length(s->outputq_resources) && !s->capture_bufcount) {
+            ret = v4l2_resource_create(s, le32toh(cmd->queue_type),
+                                       g_list_length(s->outputq_resources));
+            if (ret < 0) {
+                g_critical("%s: capture buffer allocation failed", __func__);
+                cmd->hdr.type = VIRTIO_VIDEO_RESP_ERR_INVALID_PARAMETER;
+                goto out_unlock;
+            }
+        }
     }
 
     /* get resource object */
