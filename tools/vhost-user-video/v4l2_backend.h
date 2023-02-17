@@ -65,9 +65,7 @@ int v4l2_dequeue_event(struct v4l2_device *dev);
 int v4l2_set_pixel_format(int fd, enum v4l2_buf_type buf_type,
                           uint32_t pixelformat);
 int v4l2_release_buffers(int fd, enum v4l2_buf_type type);
-int v4l2_resource_create(struct stream *s, enum v4l2_buf_type type,
-                         enum v4l2_memory memory,
-                         struct resource *res);
+int v4l2_resource_create(struct stream *s, uint32_t queue_type, uint32_t queue_len);
 int v4l2_reqbuf(int fd, enum v4l2_buf_type type, enum v4l2_memory memory, int *count);
 int v4l2_subscribe_event(struct stream *s,
                          uint32_t event_type, uint32_t id);

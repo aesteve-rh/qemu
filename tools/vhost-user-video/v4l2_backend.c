@@ -740,34 +740,30 @@ out:
     return ret;
 }
 
-int v4l2_resource_create(struct stream *s, enum v4l2_buf_type type,
-                         enum v4l2_memory memory,
-                         struct resource *res)
+int v4l2_resource_create(struct stream *s, uint32_t queue_type, uint32_t queue_len)
 {
     int ret, count;
-    g_debug("%s: v4l2_buf_type: %s", __func__, v4l2_buf_type_name(type));
+    enum v4l2_buf_type buf_type = get_v4l2_buf_type(queue_type, s->has_mplane);
+    enum virtio_video_mem_type mem_type = get_queue_mem_type(s, queue_type);
 
-    if (is_output_queue(type)) {
-        count = s->output_bufcount + 1;
-    } else if (is_capture_queue(type)) {
-        count = s->capture_bufcount + 1;
+    count = queue_len;
+    ret = v4l2_reqbuf(s->fd, buf_type, get_v4l2_memory(mem_type), &count);
+    if (ret < 0) {
+        return ret;
     }
 
-    ret = v4l2_reqbuf(s->fd, type, memory, &count);
-    if (ret == -1) {
-        goto out;
-    }
-
-    if (is_output_queue(type)) {
+    if (is_output_queue(buf_type)) {
         s->output_bufcount = count;
-        res->v4l2_index = count - 1;
-    } else if (is_capture_queue(type)) {
+    } else if (is_capture_queue(buf_type)) {
         s->capture_bufcount = count;
-        res->v4l2_index = count - 1;
     }
 
-    res->type = type;
-out:
+    if (count > queue_len) {
+        g_critical("%s: driver initiated more buffers(%d) than requested(%d)",
+                   __func__, count, queue_len);
+        return -EINVAL;
+    }
+
     return ret;
 }
 
