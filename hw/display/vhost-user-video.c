@@ -25,25 +25,20 @@
 
 #define MAX_CAPS_LEN 4096
 
-static void vhost_user_video_get_config(VirtIODevice *vdev, uint8_t *config)
+static void
+vhost_user_video_get_config(VirtIODevice *vdev, uint8_t *config_data)
 {
     VHostUserVIDEO *video = VHOST_USER_VIDEO(vdev);
-    struct virtio_video_config *vconfig = (struct virtio_video_config *)config;
-    int ret;
     Error *local_err = NULL;
+    int ret;
 
-    memset(config, 0, sizeof(struct virtio_video_config));
+    memset(config_data, 0, sizeof(struct virtio_video_config));
 
-    ret = vhost_dev_get_config(&video->vhost_dev, config,
-                               sizeof(struct virtio_video_config), &local_err);
+    ret = vhost_dev_get_config(&video->vhost_dev,
+                               config_data, sizeof(struct virtio_video_config),
+                               &local_err);
     if (ret) {
-        error_report("vhost-user-video: get device config space failed");
-
-        /*TODO vhost_dev_get_config() fails so for now lets just set it here */
-        vconfig = (struct virtio_video_config *)config;
-        vconfig->version = 0;
-        vconfig->max_caps_length = MAX_CAPS_LEN;
-        vconfig->max_resp_length = MAX_CAPS_LEN;
+        error_report_err(local_err);
         return;
     }
 }
@@ -315,7 +310,7 @@ static void vhost_user_video_device_realize(DeviceState *dev, Error **errp)
     video->vhost_dev.vqs = g_new0(struct vhost_virtqueue,
                                   video->vhost_dev.nvqs);
     video->vhost_dev.vq_index = 0;
-
+    video->vhost_user.supports_config = true;
     ret = vhost_dev_init(&video->vhost_dev, &video->vhost_user,
                          VHOST_BACKEND_TYPE_USER, 0, errp);
     if (ret < 0) {
