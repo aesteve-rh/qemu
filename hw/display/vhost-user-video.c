@@ -290,6 +290,11 @@ static void vhost_user_video_device_realize(DeviceState *dev, Error **errp)
     VHostUserVIDEO *video = VHOST_USER_VIDEO(dev);
     int ret;
 
+    if (!video->conf.chardev.chr) {
+        error_setg(errp, "vhost-user-video: chardev is mandatory");
+        return;
+    }
+
     if (!vhost_user_init(&video->vhost_user, &video->conf.chardev, errp)) {
         return;
     }
@@ -310,7 +315,10 @@ static void vhost_user_video_device_realize(DeviceState *dev, Error **errp)
     video->vhost_dev.vqs = g_new0(struct vhost_virtqueue,
                                   video->vhost_dev.nvqs);
     video->vhost_dev.vq_index = 0;
+
+    vhost_dev_set_config_notifier(&video->vhost_dev, &video_ops);
     video->vhost_user.supports_config = true;
+
     ret = vhost_dev_init(&video->vhost_dev, &video->vhost_user,
                          VHOST_BACKEND_TYPE_USER, 0, errp);
     if (ret < 0) {
