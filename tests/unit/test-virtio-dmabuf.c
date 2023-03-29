@@ -32,11 +32,11 @@ static void test_add_remove_resources(void)
         dmabuf_fd = g_random_int_range(3, 500);
         /* Add a new resource */
         g_assert(virtio_add_dmabuf(uuid, dmabuf_fd));
-        g_assert(virtio_lookup_dmabuf(uuid) == dmabuf_fd);
+        g_assert_cmpint(virtio_lookup_dmabuf(uuid), ==, dmabuf_fd);
         /* Remove the resource */
         g_assert(virtio_remove_resource(uuid));
         /* Resource is not found anymore */
-        g_assert(virtio_lookup_dmabuf(uuid) == -1);
+        g_assert_cmpint(virtio_lookup_dmabuf(uuid), ==, -1);
     }
 }
 
@@ -50,21 +50,21 @@ static void test_remove_invalid_resource(void)
         qemu_uuid_generate(&uuid);
         g_assert(virtio_lookup_dmabuf(uuid) == -1);
         /* Removing a resource that does not exist returns false */
-        g_assert(virtio_remove_resource(uuid) == false);
+        g_assert_false(virtio_remove_resource(uuid));
     }
 }
 
 static void test_add_invalid_resource(void)
 {
     QemuUUID uuid;
-    int i, dmabuf_fd = -1;
+    int i, dmabuf_fd = -1, alt_dmabuf = 2;
 
     for (i = 0; i < 20; ++i) {
         qemu_uuid_generate(&uuid);
         /* Add a new resource with invalid (negative) resource fd */
-        g_assert(virtio_add_dmabuf(uuid, dmabuf_fd) == false);
+        g_assert_false(virtio_add_dmabuf(uuid, dmabuf_fd));
         /* Rsource is not found */
-        g_assert(virtio_lookup_dmabuf(uuid) == -1);
+        g_assert_cmpint(virtio_lookup_dmabuf(uuid), ==, -1);
     }
 
     for (i = 0; i < 20; ++i) {
@@ -72,12 +72,31 @@ static void test_add_invalid_resource(void)
         qemu_uuid_generate(&uuid);
         dmabuf_fd = g_random_int_range(3, 500);
         g_assert(virtio_add_dmabuf(uuid, dmabuf_fd));
-        g_assert(virtio_lookup_dmabuf(uuid) == dmabuf_fd);
+        g_assert_cmpint(virtio_lookup_dmabuf(uuid), ==, dmabuf_fd);
         /* Add a new resource with repeated uuid returns false */
-        g_assert(virtio_add_dmabuf(uuid, dmabuf_fd) == false);
+        g_assert_false(virtio_add_dmabuf(uuid, alt_dmabuf));
         /* The value for the uuid key is not replaced */
-        g_assert(virtio_lookup_dmabuf(uuid) == dmabuf_fd);
+        g_assert_cmpint(virtio_lookup_dmabuf(uuid), ==, dmabuf_fd);
     }
+}
+
+static void test_free_resources(void)
+{
+    QemuUUID uuids[20];
+    int i, dmabuf_fd;
+
+    for (i = 0; i < ARRAY_SIZE(uuids); ++i) {
+        qemu_uuid_generate(&uuids[i]);
+        dmabuf_fd = g_random_int_range(3, 500);
+        g_assert(virtio_add_dmabuf(uuids[i], dmabuf_fd));
+        g_assert_cmpint(virtio_lookup_dmabuf(uuids[i]), ==, dmabuf_fd);
+    }
+    virtio_free_resources();
+    for (i = 0; i < ARRAY_SIZE(uuids); ++i) {
+        /* None of the resources is found after free'd */
+        g_assert_cmpint(virtio_lookup_dmabuf(uuids[i]), ==, -1);
+    }
+
 }
 
 int main(int argc, char **argv)
@@ -88,6 +107,7 @@ int main(int argc, char **argv)
                     test_remove_invalid_resource);
     g_test_add_func("/virtio-dmabuf/add_invalid_res",
                     test_add_invalid_resource);
+    g_test_add_func("/virtio-dmabuf/free_res", test_free_resources);
 
     return g_test_run();
 }
