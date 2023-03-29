@@ -13,60 +13,76 @@
 #include "hw/virtio/virtio-dmabuf.h"
 
 
-static struct shared_resources {
-    GHashTable *uuids;
-    bool locked;
-} res = {
-    .uuids = NULL,
-    .locked = false,
-};
+#define UUID_TO_POINTER(i) \
+    ((gpointer) (g_intern_static_string(qemu_uuid_unparse_strdup((&i)))))
+
+
+static GMutex lock;
+static GHashTable *resource_uuids;
+
+
+static bool virtio_add_resource(QemuUUID uuid, gpointer value)
+{
+    if (resource_uuids == NULL) {
+        resource_uuids = g_hash_table_new_full(NULL, NULL, NULL, g_free);
+    }
+    gpointer struuid = UUID_TO_POINTER(uuid);
+    if (g_hash_table_lookup(resource_uuids, struuid) != NULL) {
+        return false;
+    }
+    return g_hash_table_insert(resource_uuids, struuid, value);
+}
+
+static gpointer virtio_lookup_resource(QemuUUID uuid)
+{
+    if (resource_uuids == NULL) {
+        return NULL;
+    }
+
+    return g_hash_table_lookup(resource_uuids, UUID_TO_POINTER(uuid));
+}
 
 bool virtio_add_dmabuf(QemuUUID uuid, int udmabuf_fd)
 {
-    /*
-     * Check that the fd is valid.
-     */
-    return virtio_add_resource(uuid, GINT_TO_POINTER(udmabuf_fd));
-}
-
-bool virtio_add_resource(QemuUUID uuid, gpointer value)
-{
-    if (res.uuids == NULL) {
-        res.uuids = g_hash_table_new_full(NULL, NULL, NULL, g_free);
+    bool result;
+    if (udmabuf_fd < 0) {
+        return false;
     }
-    /*
-     * Add the resource to the table. If the key already exists in the table,
-     * do not replace its value and return false. Otherwise, return true.
-     */
-    return true;
+    g_mutex_lock(&lock);
+    if (resource_uuids == NULL) {
+        resource_uuids = g_hash_table_new(NULL, NULL);
+    }
+    result = virtio_add_resource(uuid, GINT_TO_POINTER(udmabuf_fd));
+    g_mutex_unlock(&lock);
+    return result;
 }
 
 bool virtio_remove_resource(QemuUUID uuid)
 {
-    if (res.uuids == NULL) {
+    bool result;
+    if (resource_uuids == NULL) {
         return false;
     }
-    /* 
-     * Remove the resource and return true if key was found and removed.
-     * If all resources are gone and table is empty, destroy the table.
-     */
-    return true;
+    g_mutex_lock(&lock);
+    result = g_hash_table_remove(resource_uuids, UUID_TO_POINTER(uuid));
+    g_mutex_unlock(&lock);
+    return result;
 }
 
 int virtio_lookup_dmabuf(QemuUUID uuid)
 {
-    int fd = GPOINTER_TO_INT(virtio_lookup_resource(uuid));
-    if (!fd) {
+    g_mutex_lock(&lock);
+    gpointer lookup_res = virtio_lookup_resource(uuid);
+    g_mutex_unlock(&lock);
+    if (lookup_res == NULL) {
         return -1;
     }
-    return fd;
+    return GPOINTER_TO_INT(lookup_res);
 }
 
-gpointer virtio_lookup_resource(QemuUUID uuid)
+void virtio_free_resources(void)
 {
-    if (res.uuids == NULL) {
-        return (gpointer) NULL;
-    }
-    /* Lookup the resource in the table and return it (can be NULL). */
-    return (gpointer) NULL;
+    g_hash_table_destroy(resource_uuids);
+    /* Reference count shall be 0 after the implicit unref on destroy */
+    resource_uuids = NULL;
 }
