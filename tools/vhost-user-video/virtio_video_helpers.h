@@ -23,21 +23,133 @@
 #include "libvhost-user.h"
 
 /*
+ * Virtio-v4l2 protocol definition.
+ */
+
+#define VIRTIO_V4L2_IOCTL_CODE(IOCTL) ((IOCTL >> _IOC_NRSHIFT) & _IOC_NRMASK)
+
+#define VIRTIO_V4L2_CMD_OPEN 1
+#define VIRTIO_V4L2_CMD_CLOSE 2
+#define VIRTIO_V4L2_CMD_IOCTL 3
+#define VIRTIO_V4L2_CMD_MMAP 4
+#define VIRTIO_V4L2_CMD_MUNMAP 5
+
+#define VIRTIO_V4L2_MMAP_FLAG_RW (1 << 0)
+
+struct virtio_v4l2_cmd_header {
+	uint32_t cmd;
+	uint32_t __padding;
+};
+
+struct virtio_v4l2_resp_header {
+	uint32_t status;
+	uint32_t __padding;
+};
+
+struct virtio_v4l2_cmd_open {
+	struct virtio_v4l2_cmd_header hdr;
+};
+
+struct virtio_v4l2_resp_open {
+	struct virtio_v4l2_resp_header hdr;
+	uint32_t session_id;
+	uint32_t __padding;
+};
+
+struct virtio_v4l2_cmd_close {
+	struct virtio_v4l2_cmd_header hdr;
+	uint32_t session_id;
+	uint32_t __padding;
+};
+
+struct virtio_v4l2_resp_close {
+	struct virtio_v4l2_resp_header hdr;
+};
+
+struct virtio_v4l2_cmd_ioctl {
+	struct virtio_v4l2_cmd_header hdr;
+	uint32_t session_id;
+	uint32_t code;
+};
+
+struct virtio_v4l2_resp_ioctl {
+	struct virtio_v4l2_resp_header hdr;
+};
+
+#define VIRTIO_V4L2_MMAP_FLAG_RW (1 << 0)
+
+struct virtio_v4l2_cmd_mmap {
+	struct virtio_v4l2_cmd_header hdr;
+	uint32_t session_id;
+	uint32_t flags;
+	uint64_t offset;
+};
+
+struct virtio_v4l2_resp_mmap {
+	struct virtio_v4l2_resp_header hdr;
+	uint64_t addr;
+	uint64_t len;
+};
+
+struct virtio_v4l2_cmd_munmap {
+	struct virtio_v4l2_cmd_header hdr;
+	uint64_t offset;
+};
+
+struct virtio_v4l2_resp_munmap {
+	struct virtio_v4l2_resp_header hdr;
+};
+
+#define VIRTIO_V4L2_EVT_ERROR 0
+#define VIRTIO_V4L2_EVT_DQBUF 1
+
+struct virtio_v4l2_event_header {
+	uint32_t event;
+	uint32_t session_id;
+};
+
+/**
+ * Host-side error.
+ */
+/*struct virtio_v4l2_event_error {
+	struct virtio_v4l2_event_header hdr;
+	uint32_t errno;
+	uint32_t __padding;
+};*/
+
+/**
+ * Signals that a buffer is not being used anymore on the host and can be
+ * dequeued.
+ */
+struct virtio_v4l2_event_dqbuf {
+	struct virtio_v4l2_event_header hdr;
+	struct v4l2_buffer buffer;
+	struct v4l2_plane planes[VIDEO_MAX_PLANES];
+};
+
+#define VIRTIO_V4L2_LAST_QUEUE (V4L2_BUF_TYPE_META_OUTPUT)
+
+/*
+ * End of virtio-v4l2 protocol definition.
+ */
+
+/*
  * Structure to track internal state of VIDEO Device
  */
 
 typedef struct VuVideo {
     VugDev dev;
-    struct virtio_video_config virtio_config;
+    struct virtio_v4l2_config virtio_config;
     GMainLoop *loop;
     struct v4l2_device *v4l2_dev;
-    GList *streams;
+    GHashTable *sessions;
 } VuVideo;
 
 struct v4l2_device {
     const gchar *devname;
     unsigned int dev_type;
     unsigned int capabilities;
+    unsigned char *bus_info;
     int fd;
     int epollfd;
     int opened;
@@ -49,12 +161,39 @@ struct vu_video_ctrl_command {
     VuVirtqElement elem;
     VuVirtq *vq;
     VuDev *dev;
-    struct virtio_video_cmd_hdr *cmd_hdr;
+    struct virtio_v4l2_cmd_header *cmd_hdr;
     uint32_t error;
     bool finished;
     uint8_t *cmd_buf;
 };
 
+
+typedef struct VuVideoDMABuf {
+    struct vuvbm_device *dev;
+    int memfd;
+    int dmafd;
+
+    void *start;
+    size_t length;
+} VuVideoDMABuf;
+
+/**
+ * A session on a virtio_v4l2 device, created whenever the device is opened.
+ */
+struct virtio_v4l2_session {
+	/* Session ID used to communicate with the host */
+	uint32_t id;
+
+    int fd;
+    struct v4l2_device *v4l2_dev;
+
+	bool capture_streaming;
+    uint32_t capture_num_queued;
+
+    bool output_streaming;
+    uint32_t output_num_allocated;
+    uint32_t output_num_queued;
+};
 
 /*
  * Structure to track internal state of a Stream
@@ -88,6 +227,14 @@ struct stream {
 /* Structure to track resources */
 
 struct resource {
+    enum v4l2_buf_type type;
+    uint8_t session_id;
+    uint8_t plane;
+    uint8_t lenght;
+    uint8_t map_count;
+};
+
+/*struct resource {
     uint32_t stream_id;
     struct virtio_video_resource_create vio_resource;
     struct virtio_video_resource_queue vio_res_q;
@@ -97,7 +244,7 @@ struct resource {
     enum v4l2_buf_type type;
     struct vu_video_ctrl_command *vio_q_cmd;
     bool queued;
-};
+};*/
 
 struct video_format_frame_rates {
     struct virtio_video_format_range frame_rates;
@@ -134,6 +281,40 @@ void v4l2_to_virtio_event(struct v4l2_event *ev,
 struct resource *find_resource_by_v4l2index(struct stream *s,
                                              enum v4l2_buf_type buf_type,
                                              uint32_t v4l2_index);
+
+void virtio_video_send_enum_fmt(int fd, struct vu_video_ctrl_command *cmd,
+                                struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_get_fmt(int fd, struct vu_video_ctrl_command *cmd,
+                               struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_set_fmt(int fd, struct vu_video_ctrl_command *cmd,
+                               struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_reqbufs(int fd, struct vu_video_ctrl_command *cmd,
+                               struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_querybufs(int fd, struct vu_video_ctrl_command *cmd,
+                                 struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_enum_input(int fd, struct vu_video_ctrl_command *cmd,
+                                  struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_queryctrl(int fd, struct vu_video_ctrl_command *cmd,
+                                 struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_s_g_io(int fd, struct vu_video_ctrl_command *cmd,
+                              struct virtio_v4l2_cmd_ioctl *ioctl_cmd,
+                              unsigned long request);
+void virtio_video_send_enum_output(int fd, struct vu_video_ctrl_command *cmd,
+                                   struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_try_fmt(int fd, struct vu_video_ctrl_command *cmd,
+                               struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void
+virtio_video_send_un_subscribe_event(int fd,
+                                     struct vu_video_ctrl_command *cmd,
+                                     struct virtio_v4l2_cmd_ioctl *ioctl_cmd,
+                                     unsigned long request);
+void virtio_video_send_g_selection(int fd, struct vu_video_ctrl_command *cmd,
+                                   struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_s_selection(int fd, struct vu_video_ctrl_command *cmd,
+                                   struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+void virtio_video_send_query_ext_ctrl(int fd, struct vu_video_ctrl_command *cmd,
+                                      struct virtio_v4l2_cmd_ioctl *ioctl_cmd);
+
 /*
  * The following conversion helpers and tables taken from Linux
  * frontend driver from opensynergy
@@ -160,9 +341,21 @@ virtio_video_ctrl_hdr_letoh(struct virtio_video_cmd_hdr *hdr)
 }
 
 static inline void
+virtio_v4l2_ctrl_hdr_letoh(struct virtio_v4l2_cmd_header *hdr)
+{
+    hdr->cmd = le32toh(hdr->cmd);
+}
+
+static inline void
 virtio_video_ctrl_hdr_htole(struct virtio_video_cmd_hdr *hdr)
 {
     hdr->type = htole32(hdr->type);
     hdr->stream_id = htole32(hdr->stream_id);
+}
+
+static inline void
+virtio_v4l2_ctrl_hdr_htole(struct virtio_v4l2_cmd_header *hdr)
+{
+    hdr->cmd = htole32(hdr->cmd);
 }
 #endif

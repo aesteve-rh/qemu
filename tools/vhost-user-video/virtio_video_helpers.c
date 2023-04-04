@@ -27,6 +27,7 @@
 #include <linux/videodev2.h>
 #include "v4l2_backend.h"
 #include "virtio_video_helpers.h"
+#include "vuvideo.h"
 
 struct virtio_video_convert_table {
     uint32_t virtio_value;
@@ -248,7 +249,217 @@ __le64 virtio_fmtdesc_generate_mask(GList **p_list)
     return mask;
 }
 
-/* vio_codedformat endian swapped by upper level */
+static void
+send_ioctl_response(struct vu_video_ctrl_command *cmd,
+                    uint8_t* resp, size_t resp_size)
+{
+    cmd->finished = true;
+    send_ctrl_response(cmd, resp, resp_size);
+}
+
+void virtio_video_send_enum_fmt(int fd, struct vu_video_ctrl_command *cmd,
+                                struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_fmtdesc);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_fmtdesc *fmt =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_fmtdesc(fd, fmt);
+    memcpy(resp + 1, fmt, sizeof(struct v4l2_fmtdesc));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_get_fmt(int fd, struct vu_video_ctrl_command *cmd,
+                               struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_format);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_format *fmt =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_get_format(fd, fmt);
+    memcpy(resp + 1, fmt, sizeof(struct v4l2_format));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_set_fmt(int fd, struct vu_video_ctrl_command *cmd,
+                          struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_format);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_format *fmt =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_set_format(fd, fmt);
+    memcpy(resp + 1, fmt, sizeof(struct v4l2_format));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_reqbufs(int fd, struct vu_video_ctrl_command *cmd,
+                               struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_requestbuffers);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_requestbuffers *reqbuf =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    //enum v4l2_memory memory = (enum v4l2_memory) reqbuf->memory;
+    //enum v4l2_buf_type type = (enum v4l2_buf_type) reqbuf->type;
+    resp->hdr.status = v4l2_ioctl_reqbuf(fd, reqbuf);
+
+    /*if (memory == V4L2_MEMORY_MMAP) {
+        for (int i = 0; i < reqbuf->count; i++) {
+            v4l2_video_querybuf(fd, i, memory, type);
+        }
+    }*/
+
+    memcpy(resp + 1, reqbuf, sizeof(struct v4l2_requestbuffers));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_querybufs(int fd, struct vu_video_ctrl_command *cmd,
+                                 struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    struct {
+        struct v4l2_buffer buf;
+        struct v4l2_plane planes[VIRTIO_VIDEO_MAX_PLANES];
+    } resp_buffer;
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(resp_buffer);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_buffer *qbuf =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    unsigned int index = qbuf->index;
+    enum v4l2_memory memory = (enum v4l2_memory) qbuf->memory;
+    enum v4l2_buf_type type = (enum v4l2_buf_type) qbuf->type;
+    memset(&resp_buffer, 0, sizeof(resp_buffer));
+    resp->hdr.status =
+        v4l2_video_querybuf(fd, index, memory, type, &resp_buffer.buf);
+    if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
+        memcpy(&resp_buffer.planes, 
+               resp_buffer.buf.m.planes,
+               sizeof(struct v4l2_plane) * VIRTIO_VIDEO_MAX_PLANES);
+    }
+    memcpy(resp + 1, &resp_buffer, sizeof(resp_buffer));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_enum_input(int fd, struct vu_video_ctrl_command *cmd,
+                                  struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_input);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_input *argp =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_enum_input(fd, argp);
+    memcpy(resp + 1, argp, sizeof(struct v4l2_input));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_queryctrl(int fd, struct vu_video_ctrl_command *cmd,
+                                 struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_queryctrl);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_queryctrl *ctrl =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_queryctrl(fd, ctrl);
+    memcpy(resp + 1, ctrl, sizeof(struct v4l2_queryctrl));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_s_g_io(int fd, struct vu_video_ctrl_command *cmd,
+                              struct virtio_v4l2_cmd_ioctl *ioctl_cmd,
+                              unsigned long request)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) + sizeof(int);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    int *argp = (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_set_get_io(fd, argp, request);
+    memcpy(resp + 1, argp, sizeof(int));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_enum_output(int fd, struct vu_video_ctrl_command *cmd,
+                                   struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_output);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_output *argp =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_enum_output(fd, argp);
+    memcpy(resp + 1, argp, sizeof(struct v4l2_output));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_try_fmt(int fd, struct vu_video_ctrl_command *cmd,
+                               struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_format);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_format *fmt =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_try_format(fd, fmt);
+    memcpy(resp + 1, fmt, sizeof(struct v4l2_format));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void 
+virtio_video_send_un_subscribe_event(int fd,
+                                     struct vu_video_ctrl_command *cmd,
+                                     struct virtio_v4l2_cmd_ioctl *ioctl_cmd,
+                                     unsigned long request)
+{
+    struct virtio_v4l2_resp_ioctl resp;
+    struct v4l2_event_subscription *sel =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp.hdr.status = v4l2_ioctl_un_subscribe_event(fd, sel, request);
+    send_ioctl_response(cmd, (uint8_t *)&resp, sizeof(resp));
+}
+
+void virtio_video_send_g_selection(int fd, struct vu_video_ctrl_command *cmd,
+                                   struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_selection);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_selection *sel =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_get_selection(fd, sel);
+    memcpy(resp + 1, sel, sizeof(struct v4l2_selection));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_s_selection(int fd, struct vu_video_ctrl_command *cmd,
+                                   struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_selection);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_selection *sel =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_set_selection(fd, sel);
+    memcpy(resp + 1, sel, sizeof(struct v4l2_selection));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
+
+void virtio_video_send_query_ext_ctrl(int fd, struct vu_video_ctrl_command *cmd,
+                                      struct virtio_v4l2_cmd_ioctl *ioctl_cmd)
+{
+    size_t resp_size = sizeof(struct virtio_v4l2_resp_ioctl) +
+                       sizeof(struct v4l2_query_ext_ctrl);
+    struct virtio_v4l2_resp_ioctl *resp = g_malloc0(resp_size);
+    struct v4l2_query_ext_ctrl *ctrl =
+        (void *)ioctl_cmd + sizeof(struct virtio_v4l2_cmd_ioctl);
+    resp->hdr.status = v4l2_ioctl_query_ext_ctrl(fd, ctrl);
+    memcpy(resp + 1, ctrl, sizeof(struct v4l2_query_ext_ctrl));
+    send_ioctl_response(cmd, (uint8_t *)resp, resp_size);
+}
 
 int v4l2_stream_create(struct v4l2_device *dev, uint32_t vio_codedformat,
                        struct stream *s)
@@ -298,7 +509,7 @@ void v4l2_to_virtio_fmtdesc(struct v4l2_device *dev,
 {
     struct v4l2_fmtdesc *v4l2_fmtdsc = &vid_fmt->fmt;
     struct virtio_video_format_desc *virtio_fmtdesc = &vid_fmt->desc;
-    enum v4l2_buf_type buftype = V4L2_BUF_TYPE_PRIVATE;
+    //enum v4l2_buf_type buftype = V4L2_BUF_TYPE_PRIVATE;
     int ret;
 
     if (!vid_fmt) {
@@ -321,6 +532,7 @@ void v4l2_to_virtio_fmtdesc(struct v4l2_device *dev,
     /* enumerate formats on the other queue now the format is set */
     GList *vid_fmts_l = NULL;
 
+    /*
     if (V4L2_TYPE_IS_OUTPUT(type)) {
         buftype = V4L2_TYPE_IS_MULTIPLANAR(type) ?
             V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE :
@@ -332,8 +544,9 @@ void v4l2_to_virtio_fmtdesc(struct v4l2_device *dev,
             V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE :
             V4L2_BUF_TYPE_VIDEO_OUTPUT;
     }
+    */
 
-    ret = video_enum_formats(dev, buftype, &vid_fmts_l, true);
+    //ret = video_enum_formats(dev, buftype, &vid_fmts_l, true);
 
     /*
      * generate the capability mask. bitset represents the supported

@@ -11,17 +11,15 @@
 #include "hw/virtio/vhost-user-video.h"
 #include "hw/virtio/virtio-pci.h"
 
+#define TYPE_VHOST_USER_VIDEO_PCI "vhost-user-video-pci-base"
+typedef struct VHostUserVIDEOPCI VHostUserVIDEOPCI;
+DECLARE_INSTANCE_CHECKER(VHostUserVIDEOPCI, VHOST_USER_VIDEO_PCI,
+                         TYPE_VHOST_USER_VIDEO_PCI)
+
 struct VHostUserVIDEOPCI {
     VirtIOPCIProxy parent_obj;
     VHostUserVIDEO vdev;
 };
-
-typedef struct VHostUserVIDEOPCI VHostUserVIDEOPCI;
-
-#define TYPE_VHOST_USER_VIDEO_PCI "vhost-user-video-pci-base"
-
-#define VHOST_USER_VIDEO_PCI(obj) \
-        OBJECT_CHECK(VHostUserVIDEOPCI, (obj), TYPE_VHOST_USER_VIDEO_PCI)
 
 static Property vuvideo_pci_properties[] = {
     DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags,
@@ -40,8 +38,9 @@ static void vuvideo_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
         vpci_dev->nvectors = 1;
     }
 
-    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus), errp);
-    object_property_set_bool(OBJECT(vdev), "realized", true, errp);
+    qdev_realize(vdev, BUS(&vpci_dev->bus), errp);
+    //qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus), errp);
+    //object_property_set_bool(OBJECT(vdev), "realized", true, errp);
 }
 
 static void vuvideo_pci_class_init(ObjectClass *klass, void *data)

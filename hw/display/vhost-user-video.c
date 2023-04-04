@@ -25,6 +25,7 @@
 #include "qemu/error-report.h"
 
 #define MAX_CAPS_LEN 4096
+#define VIRTIO_ID_V4L2 42
 
 static void
 vhost_user_video_get_config(VirtIODevice *vdev, uint8_t *config_data)
@@ -33,10 +34,10 @@ vhost_user_video_get_config(VirtIODevice *vdev, uint8_t *config_data)
     Error *local_err = NULL;
     int ret;
 
-    memset(config_data, 0, sizeof(struct virtio_video_config));
+    memset(config_data, 0, sizeof(struct virtio_v4l2_config));
 
     ret = vhost_dev_get_config(&video->vhost_dev,
-                               config_data, sizeof(struct virtio_video_config),
+                               config_data, sizeof(struct virtio_v4l2_config),
                                &local_err);
     if (ret) {
         error_report_err(local_err);
@@ -202,7 +203,7 @@ static int vhost_user_video_handle_config_change(struct vhost_dev *dev)
     Error *local_err = NULL;
 
     ret = vhost_dev_get_config(dev, (uint8_t *)&video->conf.config,
-                               sizeof(struct virtio_video_config), &local_err);
+                               sizeof(struct virtio_v4l2_config), &local_err);
     if (ret < 0) {
         error_report("get config space failed");
         return -1;
@@ -300,8 +301,8 @@ static void vhost_user_video_device_realize(DeviceState *dev, Error **errp)
         return;
     }
 
-    /* TODO Implement VIDEO_ENC, currently only support VIDEO_DEC */
-    virtio_init(vdev, VIRTIO_ID_VIDEO_DECODER, sizeof(struct virtio_video_config));
+    virtio_init(vdev, VIRTIO_ID_V4L2,
+                sizeof(struct virtio_v4l2_config));
 
     /* one command queue and one event queue */
     video->vhost_dev.nvqs = 2;

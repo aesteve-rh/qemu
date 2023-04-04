@@ -157,6 +157,13 @@ struct virtio_video_config {
 	__u8 device_name[32];
 };
 
+struct virtio_v4l2_config {
+    __le32 device_caps;
+    __le32 vfl_type;
+    __u8 bus_info[32];
+	__u8 device_name[32];
+};
+
 /*
  * Commands
  */

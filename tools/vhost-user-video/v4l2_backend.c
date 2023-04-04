@@ -46,13 +46,13 @@ static const char *v4l2_format_name(unsigned int fourcc);
 static const char *v4l2_buf_type_name(enum v4l2_buf_type type);
 static const char *v4l2_field_name(enum v4l2_field field);
 
-static int video_enum_frame_intervals(struct v4l2_device *dev,
+/*static int video_enum_frame_intervals(struct v4l2_device *dev,
                                       __u32 pixelformat,
                                       unsigned int width, unsigned int height,
-                                      GList **p_vid_fmt_frm_rate_l);
+                                      GList **p_vid_fmt_frm_rate_l);*/
 
-static int video_enum_frame_sizes(struct v4l2_device *dev, __u32 pixelformat,
-                                  GList **p_vid_fmt_frm_l);
+//static int video_enum_frame_sizes(struct v4l2_device *dev, __u32 pixelformat,
+//                                  GList **p_vid_fmt_frm_l);
 static int video_querycap(struct v4l2_device *dev);
 static GByteArray *iterate_frame_rate_list(GByteArray *resp,
                                             GList *frm_rate_l);
@@ -60,7 +60,7 @@ static GByteArray *iterate_format_frame_list(GByteArray *resp,
                                              GList *fmt_frm_l);
 static GByteArray *iterate_format_desc_list(GByteArray *resp,
                                             GList *fmt_desc_l);
-static void convert_to_timeval(uint64_t timestamp, struct timeval *t);
+//static void convert_to_timeval(uint64_t timestamp, struct timeval *t);
 
 /* v4l2 to str tables & helpers taken from yavta to make prettier logs */
 static struct v4l2_format_info {
@@ -237,6 +237,39 @@ static const char *v4l2_field_name(enum v4l2_field field)
     return "unknown";
 }
 
+const char *vv_ioctl_to_string(int ioctl)
+{
+#define CMD(ioctl) [VIRTIO_V4L2_IOCTL_CODE(ioctl)] = #ioctl
+    static const char *vg_ioctl_str[] = {
+        /* Ioctls */
+        CMD(VIDIOC_ENUM_FMT),
+        CMD(VIDIOC_G_FMT),
+        CMD(VIDIOC_S_FMT),
+        CMD(VIDIOC_REQBUFS),
+        CMD(VIDIOC_QUERYBUF),
+        CMD(VIDIOC_ENUMINPUT),
+        CMD(VIDIOC_QUERYCTRL),
+        CMD(VIDIOC_G_INPUT),
+        CMD(VIDIOC_S_INPUT),
+        CMD(VIDIOC_G_OUTPUT),
+        CMD(VIDIOC_S_OUTPUT),
+        CMD(VIDIOC_ENUMOUTPUT),
+        CMD(VIDIOC_TRY_FMT),
+        CMD(VIDIOC_SUBSCRIBE_EVENT),
+        CMD(VIDIOC_UNSUBSCRIBE_EVENT),
+        CMD(VIDIOC_G_SELECTION),
+        CMD(VIDIOC_S_SELECTION),
+        CMD(VIDIOC_QUERY_EXT_CTRL),
+    };
+#undef CMD
+
+    if (ioctl >= 0 && ioctl < G_N_ELEMENTS(vg_ioctl_str)) {
+        return vg_ioctl_str[ioctl];
+    } else {
+        return "unknown";
+    }
+}
+
 int v4l2_open(const gchar *devname)
 {
     int fd;
@@ -268,6 +301,7 @@ int v4l2_close(int fd)
     return ret;
 }
 
+/*
 static int video_enum_frame_intervals(struct v4l2_device *dev,
                                       __u32 pixelformat,
                                       unsigned int width, unsigned int height,
@@ -287,7 +321,7 @@ static int video_enum_frame_intervals(struct v4l2_device *dev,
         ival.height = height;
         ret = ioctl(dev->fd, VIDIOC_ENUM_FRAMEINTERVALS, &ival);
         if (ret < 0) {
-            if (errno == EINVAL) /* EINVAL means no more frame intervals */
+            if (errno == EINVAL)
                 ret = 0;
             else
                 g_printerr("VIDIOC_ENUM_FRAMEINTERVALS failed: %s (%d)\n",
@@ -295,7 +329,6 @@ static int video_enum_frame_intervals(struct v4l2_device *dev,
             break;
         }
 
-        /* driver sanity checks */
         if (i != ival.index)
             g_printerr("Warning: driver returned wrong ival index "
                        "%u.\n", ival.index);
@@ -313,9 +346,7 @@ static int video_enum_frame_intervals(struct v4l2_device *dev,
             g_print(", ");
         }
 
-        /* allocate video_format_frame */
         fmt_frm_rate = g_new0(struct video_format_frame_rates, 1);
-        /* keep a copy of v4l2 frmsizeenum struct */
         memcpy(&fmt_frm_rate->v4l_ival, &ival,
                sizeof(struct v4l2_frmivalenum));
         vid_fmt_frm_rate_l =
@@ -413,7 +444,6 @@ static void video_frame_size_continuous(struct v4l2_device *dev,
     vid_frame->frame.height.max = htole32(frame->stepwise.max_height);
     vid_frame->frame.height.step = htole32(frame->stepwise.step_height);
 
-    /* driver sanity check */
     if (frame->stepwise.step_height != 1 ||
         frame->stepwise.step_width != 1) {
         g_printerr("Warning: invalid step for continuous framesize");
@@ -457,8 +487,9 @@ static void video_frame_size_stepwise(struct v4l2_device *dev,
 
     g_debug(")");
 }
+*/
 
-static int video_enum_frame_sizes(struct v4l2_device *dev,
+/*static int video_enum_frame_sizes(struct v4l2_device *dev,
                                   __u32 pixelformat, GList **p_vid_fmt_frm_l)
 {
     struct v4l2_frmsizeenum frame;
@@ -477,7 +508,7 @@ static int video_enum_frame_sizes(struct v4l2_device *dev,
         frame.pixel_format = pixelformat;
         ret = ioctl(dev->fd, VIDIOC_ENUM_FRAMESIZES, &frame);
         if (ret < 0) {
-            if (errno == EINVAL) /* EINVAL means no more frame sizes */
+            if (errno == EINVAL)
                 ret = 0;
             else
                 g_printerr("VIDIOC_ENUM_FRAMESIZES failed: %s (%d)\n",
@@ -485,7 +516,6 @@ static int video_enum_frame_sizes(struct v4l2_device *dev,
             break;
         }
 
-        /* driver sanity checks */
         if (i != frame.index)
             g_printerr("Warning: driver returned wrong frame index "
                        "%u.\n", frame.index);
@@ -493,9 +523,7 @@ static int video_enum_frame_sizes(struct v4l2_device *dev,
             g_printerr("Warning: driver returned wrong frame pixel "
                        "format %08x.\n", frame.pixel_format);
 
-        /* allocate video_format_frame */
         vid_frame = g_new0(struct video_format_frame, 1);
-        /* keep a copy of v4l2 frmsizeenum struct */
         memcpy(&vid_frame->v4l_framesize, &frame,
                sizeof(struct v4l2_frmsizeenum));
         vid_fmt_frm_l = g_list_append(vid_fmt_frm_l, vid_frame);
@@ -527,7 +555,7 @@ static int video_enum_frame_sizes(struct v4l2_device *dev,
     }
 
     return ret;
-}
+}*/
 
 int video_send_decoder_start_cmd(struct v4l2_device *dev)
 {
@@ -551,6 +579,8 @@ static int video_querycap(struct v4l2_device *dev)
         return 0;
     }
 
+    
+
     caps = cap.capabilities & V4L2_CAP_DEVICE_CAPS ?
             cap.device_caps :
             cap.capabilities;
@@ -558,7 +588,9 @@ static int video_querycap(struct v4l2_device *dev)
     has_video = caps & (V4L2_CAP_VIDEO_CAPTURE_MPLANE |
                         V4L2_CAP_VIDEO_CAPTURE |
                         V4L2_CAP_VIDEO_OUTPUT_MPLANE |
-                        V4L2_CAP_VIDEO_OUTPUT);
+                        V4L2_CAP_VIDEO_OUTPUT |
+                        V4L2_CAP_VIDEO_M2M |
+                        V4L2_CAP_VIDEO_M2M_MPLANE);
     has_meta = caps & (V4L2_CAP_META_CAPTURE |
                        V4L2_CAP_META_OUTPUT);
     has_capture = caps & (V4L2_CAP_VIDEO_CAPTURE_MPLANE |
@@ -580,7 +612,9 @@ static int video_querycap(struct v4l2_device *dev)
             has_output ? " output," : "",
             has_mplane ? "with" : "without");
 
+    dev->bus_info = g_malloc0(sizeof(cap.bus_info));
     dev->capabilities = caps;
+    memcpy(dev->bus_info, cap.bus_info, sizeof(cap.bus_info));
     dev->has_mplane = has_mplane;
 
     return 0;
@@ -690,7 +724,7 @@ get_queue_mem_type(struct stream *s,
 
 int video_free_buffers(int fd, enum v4l2_buf_type type, enum v4l2_memory memory)
 {
-    int ret, count = 0;
+    int ret = 0;//, count = 0;
     g_debug("%s: v4l2_buf_type: %s: Issuing REQBUFS 0"
             , __func__, v4l2_buf_type_name(type));
 
@@ -708,19 +742,19 @@ int video_free_buffers(int fd, enum v4l2_buf_type type, enum v4l2_memory memory)
      */
 
     /* TODO support V4L2_BUF_CAP_SUPPORTS_ORPHANED_BUFS */
-    ret = v4l2_ioctl_reqbuf(fd, type, memory, &count);
+    //ret = v4l2_ioctl_reqbuf(fd, type, memory, &count);
     return ret;
 }
 
 int video_resource_create(struct stream *s,
                           uint32_t queue_type, uint32_t queue_len)
 {
-    int ret, count;
+    int ret = 0, count = 0;
     enum v4l2_buf_type buf_type = get_v4l2_buf_type(queue_type, s->has_mplane);
-    enum virtio_video_mem_type mem_type = get_queue_mem_type(s, queue_type);
+    //enum virtio_video_mem_type mem_type = get_queue_mem_type(s, queue_type);
 
     count = queue_len;
-    ret = v4l2_ioctl_reqbuf(s->fd, buf_type, get_v4l2_memory(mem_type), &count);
+    //ret = v4l2_ioctl_reqbuf(s->fd, buf_type, get_v4l2_memory(mem_type), &count);
     if (ret < 0) {
         return ret;
     }
@@ -793,20 +827,20 @@ int video_streamon(struct stream *s,
                    struct v4l2_device *dev, enum v4l2_buf_type type)
 {
     int ret = 0;
-    uint32_t id = 0;
+    //uint32_t id = 0;
 
     if (!s->subscribed_events) {
         /* subscribe for SOURCE_CHANGE event */
         if (dev->sup_dyn_res_switching) {
-            ret = v4l2_ioctl_subscribe_event(
-                s->fd, V4L2_EVENT_SOURCE_CHANGE, id);
+            //ret = v4l2_ioctl_subscribe_event(
+            //    s->fd, V4L2_EVENT_SOURCE_CHANGE, id);
             if (ret < 0) {
                 g_printerr("V4L2_EVENT_SOURCE_CHANGE failed: %s (%d)\n",
                            g_strerror(errno), errno);
             }
         }
         /* subscribe for EOS event */
-        ret = v4l2_ioctl_subscribe_event(s->fd, V4L2_EVENT_EOS, id);
+        //ret = v4l2_ioctl_subscribe_event(s->fd, V4L2_EVENT_EOS, id);
         if (ret < 0) {
             g_printerr("V4L2_EVENT_EOS failed: %s (%d)\n",
                        g_strerror(errno), errno);
@@ -888,6 +922,8 @@ int video_streamoff(struct stream *s, enum v4l2_buf_type type)
     return ret;
 }
 
+/*
+
 int v4l2_queue_buffer(enum v4l2_buf_type type,
                       enum v4l2_memory memory,
                       struct virtio_video_resource_queue *qcmd,
@@ -912,7 +948,7 @@ int v4l2_queue_buffer(enum v4l2_buf_type type,
     convert_to_timeval(le64toh(qcmd->timestamp), &vbuf.timestamp);
 
     if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
-        /* for mplane length field is number of elements in planes array */
+        // for mplane length field is number of elements in planes array
         vbuf.length = res->vio_resource.num_planes;
         vbuf.m.planes = g_malloc0(sizeof(struct v4l2_plane)
                                   * res->vio_resource.num_planes);
@@ -922,7 +958,7 @@ int v4l2_queue_buffer(enum v4l2_buf_type type,
             vbuf.m.planes[i].length = (unsigned long)res->iov[i].iov_len;
         }
     } else if (res->iov != NULL) {
-        /* m is a union of userptr, *planes and fd */
+        // m is a union of userptr, *planes and fd
         vbuf.m.userptr = (unsigned long)res->iov[0].iov_base;
         vbuf.length = res->iov[0].iov_len;
         g_debug("%s: iov_base = 0x%p", __func__, res->iov[0].iov_base);
@@ -949,7 +985,7 @@ int v4l2_queue_buffer(enum v4l2_buf_type type,
     ret = video_streamon(s, dev, type);
     if (ret < 0) {
         g_printerr("video_streamon failed (%d)", ret);
-        /* only print error, as video_streamon() does both queues */
+        // only print error, as video_streamon() does both queues
     }
 
     res->queued = true;
@@ -965,6 +1001,7 @@ int v4l2_queue_buffer(enum v4l2_buf_type type,
     return ret;
 
 }
+*/
 
 int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
                         enum v4l2_memory memory,
@@ -972,9 +1009,9 @@ int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
 {
     struct v4l2_buffer vbuf;
     int ret = 0;
-    struct resource *r;
+    //struct resource *r;
     struct virtio_video_resource_queue_resp resp;
-    struct vu_video_ctrl_command *vio_cmd;
+    //struct vu_video_ctrl_command *vio_cmd;
 
     memset(&vbuf, 0, sizeof(vbuf));
 
@@ -1005,8 +1042,8 @@ int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
         g_free(vbuf.m.planes);
     }
 
-    r = find_resource_by_v4l2index(s, type, vbuf.index);
-    if (!r) {
+    //r = find_resource_by_v4l2index(s, type, vbuf.index);
+    /*if (!r) {
         g_printerr("%s: Can't find resource for dequeued buffer!", __func__);
         return -EINVAL;
     }
@@ -1018,8 +1055,9 @@ int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
     resp.hdr.stream_id = r->stream_id;
     resp.hdr.type = VIRTIO_VIDEO_RESP_OK_NODATA;
     resp.timestamp = htole64(r->vio_res_q.timestamp);
+    */
 
-    /* encoder only */
+    // encoder only
     resp.size = htole32(vbuf.bytesused);
 
     if (vbuf.flags & V4L2_BUF_FLAG_LAST &&
@@ -1044,50 +1082,60 @@ int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
         g_critical("%s: V4L2_BUF_FLAG_ERROR\n", __func__);
     }
 
-    g_debug("%s: Send queue_buffer reply: stream_id=%d type=0x%x "
+    /*g_debug("%s: Send queue_buffer reply: stream_id=%d type=0x%x "
             "flags=0x%x resource_id=%d t=%llx", __func__,
             resp.hdr.stream_id, resp.hdr.type, resp.flags,
-            r->vio_resource.resource_id, resp.timestamp);
+            r->vio_resource.resource_id, resp.timestamp);*/
 
-    send_ctrl_response(vio_cmd, (uint8_t *) &resp,
-                       sizeof(struct virtio_video_resource_queue_resp));
+    //send_ctrl_response(vio_cmd, (uint8_t *) &resp,
+    //                   sizeof(struct virtio_video_resource_queue_resp));
 
-    vio_cmd->finished = true;
-    free_resource_mem(r);
+    //vio_cmd->finished = true;
+    //free_resource_mem(r);
 
     return ret;
 }
 
-int v4l2_video_get_selection(int fd, enum v4l2_buf_type type,
-                             struct v4l2_selection *sel)
+int v4l2_ioctl_get_selection(int fd, struct v4l2_selection *sel)
 {
     int ret = 0;
 
     if (!sel) {
-        return -EINVAL;
-    }
-
-    memset(sel, 0, sizeof(struct v4l2_selection));
-
-    sel->type = type;
-
-    if (V4L2_TYPE_IS_CAPTURE(type)) {
-        sel->target = V4L2_SEL_TGT_COMPOSE;
-    } else if (V4L2_TYPE_IS_OUTPUT(type)) {
-        sel->target = V4L2_SEL_TGT_CROP;
+        return EINVAL;
     }
 
     ret = ioctl(fd, VIDIOC_G_SELECTION, sel);
     if (ret < 0) {
         g_printerr("Unable to get selection: %s (%d)\n",
                    g_strerror(errno), errno);
-        return ret;
+        return errno;
     }
 
-    g_debug("%s: VIDIOC_G_SELECTION: fd=(%d) %s: left=(%d) "
-            "top=(%d) width=(%d) height=(%d)",
-            __func__, fd, v4l2_buf_type_name(type), sel->r.left,
-            sel->r.top, sel->r.width, sel->r.height);
+    g_debug("%s: VIDIOC_G_SELECTION: fd=(%d): left=(%d) "
+            "top=(%d) width=(%d) height=(%d)", __func__,
+            fd, sel->r.left, sel->r.top, sel->r.width, sel->r.height);
+
+    return ret;
+}
+
+int v4l2_ioctl_set_selection(int fd, struct v4l2_selection *sel)
+{
+    int ret = 0;
+
+    if (!sel) {
+        return EINVAL;
+    }
+
+    ret = ioctl(fd, VIDIOC_S_SELECTION, sel);
+    if (ret < 0) {
+        g_printerr("Unable to set selection: %s (%d)\n",
+                   g_strerror(errno), errno);
+        return errno;
+    }
+
+    g_debug("%s: VIDIOC_S_SELECTION: fd=(%d): left=(%d) "
+            "top=(%d) width=(%d) height=(%d)", __func__,
+            fd, sel->r.left, sel->r.top, sel->r.width, sel->r.height);
 
     return ret;
 }
@@ -1146,59 +1194,6 @@ int v4l2_video_get_param(int fd, enum v4l2_buf_type type,
             sparam->parm.capture.timeperframe.denominator);
 
     return ret;
-}
-
-int v4l2_video_get_format(int fd, enum v4l2_buf_type type,
-                          struct v4l2_format *fmt)
-{
-    unsigned int i;
-    int ret;
-
-    if (!fmt) {
-        return -EINVAL;
-    }
-
-    memset(fmt, 0, sizeof(struct v4l2_format));
-    fmt->type = type;
-
-    ret = ioctl(fd, VIDIOC_G_FMT, fmt);
-    if (ret < 0) {
-        g_printerr("Unable to get format: %s (%d)\n",
-                   g_strerror(errno), errno);
-        return ret;
-    }
-
-    if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
-        g_print("Video format: %s (%08x) %ux%u field %s, %u planes:\n",
-                v4l2_format_name(fmt->fmt.pix_mp.pixelformat),
-                                 fmt->fmt.pix_mp.pixelformat,
-                                 fmt->fmt.pix_mp.width,
-                                 fmt->fmt.pix_mp.height,
-                v4l2_field_name(fmt->fmt.pix_mp.field),
-                                fmt->fmt.pix_mp.num_planes);
-
-        for (i = 0; i < fmt->fmt.pix_mp.num_planes; i++) {
-            g_print(" * Stride %u, buffer size %u\n",
-                   fmt->fmt.pix_mp.plane_fmt[i].bytesperline,
-                   fmt->fmt.pix_mp.plane_fmt[i].sizeimage);
-        }
-    } else if (V4L2_TYPE_IS_META(type)) {
-        g_print("Meta-data format: %s (%08x) buffer size %u\n",
-                v4l2_format_name(fmt->fmt.meta.dataformat),
-                                 fmt->fmt.meta.dataformat,
-                                 fmt->fmt.meta.buffersize);
-    } else {
-        g_print("Video format: %s (%08x) %ux%u (stride %u) field %s "
-                "buffer size %u\n",
-                v4l2_format_name(fmt->fmt.pix.pixelformat),
-                                 fmt->fmt.pix.pixelformat,
-                                 fmt->fmt.pix.width, fmt->fmt.pix.height,
-                                 fmt->fmt.pix.bytesperline,
-                v4l2_field_name(fmt->fmt.pix_mp.field),
-                                fmt->fmt.pix.sizeimage);
-    }
-
-    return 0;
 }
 
 int v4l2_video_set_format(int fd, enum v4l2_buf_type type,
@@ -1265,7 +1260,7 @@ v4l2_set_pixel_format(int fd, enum v4l2_buf_type buf_type, uint32_t pixelformat)
             buf_type, pixelformat);
 
     /* get the currently set format */
-    ret = v4l2_video_get_format(fd, buf_type, &cur_fmt);
+    //ret = v4l2_video_get_format(fd, buf_type, &cur_fmt);
     if (ret < 0) {
         g_printerr("%s: v4l2_video_get_format() failed\n", __func__);
         return ret;
@@ -1284,100 +1279,6 @@ v4l2_set_pixel_format(int fd, enum v4l2_buf_type buf_type, uint32_t pixelformat)
     if (ret < 0) {
         g_printerr("Unable to set format: %s (%d)\n",
                    g_strerror(errno), errno);
-    }
-
-    return ret;
-}
-
-int video_enum_formats(struct v4l2_device *dev, enum v4l2_buf_type type,
-                       GList **p_fmt_list, bool only_enum_fmt)
-{
-    struct v4l2_fmtdesc fmt;
-    struct video_format *vid_fmt = NULL;
-    GList *fmt_list = NULL;
-    unsigned int index;
-    int ret = 0;
-
-    if (!dev) {
-        return -EINVAL;
-    }
-
-    for (index = 0; ; ++index) {
-        memset(&fmt, 0, sizeof fmt);
-        fmt.index = index;
-        fmt.type = type;
-
-        ret = ioctl(dev->fd, VIDIOC_ENUM_FMT, &fmt);
-        if (ret < 0) {
-            if (errno == EINVAL) {
-                ret = 0;
-            } else {
-                g_printerr("%s: VIDIOC_ENUM_FMT failed %s (%d)\n",
-                           __func__, g_strerror(errno), errno);
-            }
-        break;
-        }
-
-        /* do some driver sanity checks */
-        if (index != fmt.index) {
-            g_warning("v4l2 driver modified index %u\n", fmt.index);
-        }
-        if (type != fmt.type) {
-            g_warning("v4l2 driver modified type %u\n", fmt.type);
-        }
-        g_debug("\tFormat %u: %s (%08x)", index,
-                v4l2_format_name(fmt.pixelformat), fmt.pixelformat);
-        g_debug("\tType: %s (%u)", v4l2_buf_type_name(fmt.type),
-                fmt.type);
-        g_debug("\tName: %.32s", fmt.description);
-        g_debug("\tFlags: 0x%x", fmt.flags);
-
-        if (fmt.flags & V4L2_FMT_FLAG_DYN_RESOLUTION &&
-            fmt.flags & V4L2_FMT_FLAG_COMPRESSED) {
-            g_print("dynamic resolution switching supported\n");
-            dev->sup_dyn_res_switching = true;
-        }
-
-        /* test if pixelformat converts to virtio */
-        if (!virtio_video_v4l2_format_to_virtio(fmt.pixelformat)) {
-            g_info("Skipping Format %s (%08x) - no virtio-video equivalent",
-                   v4l2_format_name(fmt.pixelformat), fmt.pixelformat);
-            continue;
-        }
-
-        vid_fmt = g_new0(struct video_format, 1);
-        /* keep a copy of v4l2 struct */
-        memcpy(&vid_fmt->fmt, &fmt, sizeof(struct v4l2_fmtdesc));
-        /* add it to linked list */
-        fmt_list = g_list_append(fmt_list, vid_fmt);
-
-        if (!only_enum_fmt) {
-            /* pass video_format to enum_frame_sizes */
-            ret = video_enum_frame_sizes(dev, fmt.pixelformat,
-                                         &vid_fmt->vid_fmt_frm_l);
-            if (ret < 0) {
-                g_printerr("video_enum_frame_sizes failed\n");
-            }
-
-            /* convert to virtio format */
-            v4l2_to_virtio_fmtdesc(dev, vid_fmt, type);
-        }
-
-        /* determine type of v4l2 device */
-        v4l2_set_device_type(dev, type, &fmt);
-    }
-
-    if (ret == 0) {
-        g_print("%s: Enumerated %d formats on v4l2 %s queue",
-                __func__, index, v4l2_buf_type_name(type));
-        g_print(" %d formats are representable by virtio-video\n",
-                g_list_length(fmt_list));
-        if (!only_enum_fmt) {
-            g_print("%s: Enumerated %d frame sizes\n",
-                    __func__, g_list_length(vid_fmt->vid_fmt_frm_l));
-        }
-
-        *p_fmt_list = fmt_list;
     }
 
     return ret;
@@ -1519,29 +1420,6 @@ GByteArray *create_query_cap_resp(struct virtio_video_query_capability *qcmd,
     return resp;
 }
 
-/* timestamp in nsecs */
-void convert_to_timeval(uint64_t timestamp, struct timeval *t)
-{
-    uint64_t f_nsecs;
-
-    uint64_t nsecs;
-
-    /* convert to seconds */
-    t->tv_sec = timestamp / 1000000000;
-
-    /* deal with fraction of a second */
-    f_nsecs = t->tv_sec * 1000000000;
-    t->tv_usec = (timestamp - f_nsecs) / 1000;
-
-    /* sanity check above conversion */
-    nsecs = t->tv_sec * 1000000000;
-    nsecs += (t->tv_usec * 1000);
-
-    if (timestamp != nsecs) {
-        g_critical("%s: timestamp != nsecs", __func__);
-    }
-}
-
 void v4l2_backend_free(struct v4l2_device *dev)
 {
     if (dev && dev->opened) {
@@ -1554,9 +1432,6 @@ struct v4l2_device *v4l2_backend_init(const gchar *devname)
 {
     struct v4l2_device *dev;
     int ret = 0;
-    GList *vid_output_fmt_l = NULL;
-    GList *vid_capture_fmt_l = NULL;
-    enum v4l2_buf_type buf_type;
 
     if (!devname) {
         return NULL;
@@ -1575,78 +1450,242 @@ struct v4l2_device *v4l2_backend_init(const gchar *devname)
     dev->devname = devname;
 
     ret = video_querycap(dev);
-
-    buf_type = dev->has_mplane ? V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE
-        : V4L2_BUF_TYPE_VIDEO_OUTPUT;
-
-    /* enumerate coded formats on OUTPUT */
-    ret = video_enum_formats(dev, buf_type,
-                             &vid_output_fmt_l, true);
     if (ret < 0) {
-        g_printerr("video_enum_formats() failed OUTPUT\n");
+        g_printerr("video_querycap() failed\n");
         goto err;
-    }
-
-    buf_type = dev->has_mplane ? V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE
-        : V4L2_BUF_TYPE_VIDEO_CAPTURE;
-
-    /* enumerate coded formats on CAPTURE */
-    ret = video_enum_formats(dev, buf_type,
-                             &vid_capture_fmt_l, true);
-    if (ret < 0) {
-        g_printerr("video_enum_formats() failed CAPTURE\n");
-        goto err2;
-    }
-
-    if (dev->dev_type & STATEFUL_ENCODER)
-        g_print("%s: %s is a stateful encoder (0x%x)!\n", __func__,
-                devname, dev->dev_type);
-
-    if (dev->dev_type & STATEFUL_DECODER)
-        g_print("%s: %s is a stateful decoder (0x%x)!\n", __func__,
-                devname, dev->dev_type);
-
-    video_free_formats(&vid_output_fmt_l);
-    video_free_formats(&vid_capture_fmt_l);
-
-    if (!(dev->dev_type & STATEFUL_ENCODER ||
-          dev->dev_type & STATEFUL_DECODER)) {
-        g_printerr("v4l2 device not supported! v4l2 backend only supports "
-                   "stateful codec devices currently(%d)!\n", dev->dev_type);
-        goto err3;
     }
 
     g_debug("%s: success!\n", __func__);
     return dev;
-
-err3:
-    video_free_formats(&vid_capture_fmt_l);
-err2:
-    video_free_formats(&vid_output_fmt_l);
 err:
     v4l2_backend_free(dev);
     return NULL;
 }
 
-int v4l2_ioctl_query_control(int fd, uint32_t control, int32_t *value)
+int v4l2_ioctl_fmtdesc(int fd, struct v4l2_fmtdesc *fmt)
 {
     int ret = 0;
-    struct v4l2_queryctrl ctrl;
 
-    g_debug("%s:%d", __func__, __LINE__);
+    g_debug("%s", __func__);
+    if (!fmt) {
+        return EINVAL;
+    }
 
-    ctrl.id = control;
+    g_debug("v4l2 driver index %u", fmt->index);
+    g_debug("v4l2 driver type (%s) %u",
+            v4l2_buf_type_name(fmt->type), fmt->type);
 
-    ret = ioctl(fd, VIDIOC_QUERYCTRL, &ctrl);
+    ret = ioctl(fd, VIDIOC_ENUM_FMT, fmt);
+    if (ret < 0) {
+        g_printerr("Unable to enum formats %s (%d)\n",
+                   g_strerror(errno), errno);
+        return errno;
+    }
+
+    g_debug("\tFormat %u: %s (%08x)", fmt->index,
+            v4l2_format_name(fmt->pixelformat), fmt->pixelformat);
+    g_debug("\tType: %s (%u)", v4l2_buf_type_name(fmt->type), fmt->type);
+    g_debug("\tName: %.32s", fmt->description);
+    g_debug("\tFlags: 0x%x", fmt->flags);
+    return ret;
+}
+
+int v4l2_ioctl_get_format(int fd, struct v4l2_format *fmt)
+{
+    unsigned i;
+    int ret;
+
+    if (!fmt) {
+        return EINVAL;
+    }
+
+    ret = ioctl(fd, VIDIOC_G_FMT, fmt);
+    if (ret < 0) {
+        g_printerr("Unable to get format: %s (%d)\n",
+                   g_strerror(errno), errno);
+        return errno;
+    }
+
+    if (V4L2_TYPE_IS_MULTIPLANAR(fmt->type)) {
+        g_print("Video format: %s (%08x) %ux%u field %s, %u planes:\n",
+                v4l2_format_name(fmt->fmt.pix_mp.pixelformat),
+                                 fmt->fmt.pix_mp.pixelformat,
+                                 fmt->fmt.pix_mp.width,
+                                 fmt->fmt.pix_mp.height,
+                v4l2_field_name(fmt->fmt.pix_mp.field),
+                                fmt->fmt.pix_mp.num_planes);
+
+        for (i = 0; i < fmt->fmt.pix_mp.num_planes; i++) {
+            g_print(" * Stride %u, buffer size %u\n",
+                   fmt->fmt.pix_mp.plane_fmt[i].bytesperline,
+                   fmt->fmt.pix_mp.plane_fmt[i].sizeimage);
+        }
+    } else if (V4L2_TYPE_IS_META(fmt->type)) {
+        g_print("Meta-data format: %s (%08x) buffer size %u\n",
+                v4l2_format_name(fmt->fmt.meta.dataformat),
+                                 fmt->fmt.meta.dataformat,
+                                 fmt->fmt.meta.buffersize);
+    } else {
+        g_print("Video format: %s (%08x) %ux%u (stride %u) field %s "
+                "buffer size %u\n",
+                v4l2_format_name(fmt->fmt.pix.pixelformat),
+                                 fmt->fmt.pix.pixelformat,
+                                 fmt->fmt.pix.width, fmt->fmt.pix.height,
+                                 fmt->fmt.pix.bytesperline,
+                v4l2_field_name(fmt->fmt.pix_mp.field),
+                                fmt->fmt.pix.sizeimage);
+    }
+
+    return 0;
+}
+
+int v4l2_ioctl_set_format(int fd, struct v4l2_format *fmt)
+{
+    int ret = 0;
+
+    if (!fmt) {
+        return EINVAL;
+    }
+
+    ret = ioctl(fd, VIDIOC_S_FMT, fmt);
+    if (ret < 0) {
+        g_printerr("Unable to set format: %s (%d)\n",
+                   g_strerror(errno), errno);
+        return errno;
+    }
+
+    return ret;     
+}
+
+int v4l2_ioctl_try_format(int fd, struct v4l2_format *fmt)
+{
+    int ret = 0;
+
+    if (!fmt) {
+        return EINVAL;
+    }
+
+    ret = ioctl(fd, VIDIOC_TRY_FMT, fmt);
+    if (ret < 0) {
+        g_printerr("Unable to try format: %s (%d)\n",
+                   g_strerror(errno), errno);
+        return errno;
+    }
+
+    return ret;     
+}
+
+int v4l2_ioctl_enum_input(int fd, struct v4l2_input *argp)
+{
+    int ret = 0;
+
+    if (!argp) {
+        return EINVAL;
+    }
+
+    ret = ioctl(fd, VIDIOC_ENUMINPUT, argp);
+    if (ret < 0) {
+        g_printerr("Unable to enum input: %s (%d)\n",
+                   g_strerror(errno), errno);
+        return errno;
+    }
+
+    return ret; 
+}
+
+int v4l2_ioctl_enum_output(int fd, struct v4l2_output *argp)
+{
+    int ret = 0;
+
+    if (!argp) {
+        return EINVAL;
+    }
+
+    ret = ioctl(fd, VIDIOC_ENUMOUTPUT, argp);
+    if (ret < 0) {
+        g_printerr("Unable to enum output: %s (%d)\n",
+                   g_strerror(errno), errno);
+        return errno;
+    }
+
+    return ret; 
+}
+
+int v4l2_ioctl_queryctrl(int fd, struct v4l2_queryctrl *ctrl)
+{
+    int ret = 0;
+
+    if (!ctrl) {
+        return EINVAL;
+    }
+
+    g_debug("%s: id 0x%x", __func__, ctrl->id);
+    ret = ioctl(fd, VIDIOC_QUERYCTRL, ctrl);
     if (ret < 0) {
         g_printerr("Unable to query control: %s (%d)\n",
                    g_strerror(errno), errno);
-        return ret;
+        return errno;
     }
 
-    *value = ctrl.type;
-    g_debug("%s: ctrl=0x%x type=0x%x", __func__, control, *value);
+    g_debug("%s: ctrl .id=0x%x .type=0x%x", __func__, ctrl->id, ctrl->type);
+    return ret;
+}
 
+int v4l2_ioctl_set_get_io(int fd, int *argp, unsigned long request)
+{
+    int ret = 0;
+    unsigned long code;
+
+    if (!argp) {
+        return EINVAL;
+    }
+
+    switch (request) {
+    case VIRTIO_V4L2_IOCTL_CODE(VIDIOC_G_INPUT):
+        code = VIDIOC_G_INPUT;
+        break;
+    case VIRTIO_V4L2_IOCTL_CODE(VIDIOC_S_INPUT):
+        code = VIDIOC_S_INPUT;
+        break;
+    case VIRTIO_V4L2_IOCTL_CODE(VIDIOC_G_OUTPUT):
+        code = VIDIOC_G_OUTPUT;
+        break;
+    case VIRTIO_V4L2_IOCTL_CODE(VIDIOC_S_OUTPUT):
+        code = VIDIOC_S_OUTPUT;
+        break;
+    default:
+        return EINVAL;
+    }
+
+    g_debug("%s: Sending %s ioctl to host\n",
+            __func__, vv_ioctl_to_string(request));
+
+    ret = ioctl(fd, code, argp);
+    if (ret < 0) {
+        g_printerr("%s failed: %s (%d)\n",
+                   vv_ioctl_to_string(request), g_strerror(errno), errno);
+        return errno;
+    }
+    return ret;
+}
+
+int v4l2_ioctl_query_ext_ctrl(int fd, struct v4l2_query_ext_ctrl *ctrl)
+{
+    int ret = 0;
+
+    if (!ctrl) {
+        return EINVAL;
+    }
+
+    g_debug("%s: id 0x%x", __func__, ctrl->id);
+    ret = ioctl(fd, VIDIOC_QUERY_EXT_CTRL, ctrl);
+    if (ret < 0) {
+        g_printerr("Unable to query ext control: %s (%d)\n",
+                   g_strerror(errno), errno);
+        return errno;
+    }
+
+    g_debug("%s: ctrl .id=0x%x .type=0x%x", __func__, ctrl->id, ctrl->type);
     return ret;
 }
 
@@ -1655,15 +1694,13 @@ int v4l2_ioctl_get_control(int fd , uint32_t control, int32_t *value)
     int ret = 0;
     struct v4l2_control ctrl;
 
-    g_debug("%s:%d", __func__, __LINE__);
-
     ctrl.id = control;
 
     ret = ioctl(fd, VIDIOC_G_CTRL, &ctrl);
     if (ret < 0) {
         g_printerr("Unable to get control: %s (%d)\n",
                    g_strerror(errno), errno);
-        return ret;
+        return errno;
     }
 
     *value = ctrl.value;
@@ -1672,58 +1709,99 @@ int v4l2_ioctl_get_control(int fd , uint32_t control, int32_t *value)
     return ret;
 }
 
-int v4l2_ioctl_reqbuf(int fd, enum v4l2_buf_type type,
-                      enum v4l2_memory memory, int *count)
+int v4l2_ioctl_reqbuf(int fd, struct v4l2_requestbuffers *reqbuf)
 {
     int ret;
-    struct v4l2_requestbuffers reqbuf;
 
-    memset(&reqbuf, 0, sizeof(reqbuf));
-    reqbuf.type = type;
-    reqbuf.memory = memory;
-    reqbuf.count = *count;
-
-    ret = ioctl(fd, VIDIOC_REQBUFS, &reqbuf);
+    if (!reqbuf) {
+        return EINVAL;
+    }
+    
+    ret = ioctl(fd, VIDIOC_REQBUFS, reqbuf);
     if (ret == -1) {
         if (errno == EBUSY) {
             g_critical("%s: EBUSY: buffers for %s still mapped or exported!\n",
-                       __func__, v4l2_buf_type_name(type));
+                       __func__, v4l2_buf_type_name(reqbuf->type));
         } else {
             g_printerr("VIDIOC_REQBUFS failed: %s (%d)\n",
                        g_strerror(errno), errno);
         }
-        return ret;
+        return errno;
     }
 
-    *count = reqbuf.count;
-
     g_debug("%s: VIDIOC_REQBUFS capabilities(0x%x) granted(%d)",
-            __func__, reqbuf.capabilities, reqbuf.count);
+            __func__, reqbuf->capabilities, reqbuf->count);
 
     return ret;
 }
 
-int v4l2_ioctl_subscribe_event(int fd, uint32_t event_type, uint32_t id)
+int v4l2_video_querybuf(int fd, 
+                        unsigned int index,
+                        enum v4l2_memory memory,
+                        enum v4l2_buf_type type,
+                        struct v4l2_buffer *qbuf)
+{
+    memset(qbuf, 0, sizeof(struct v4l2_buffer));
+    qbuf->index = index;
+    qbuf->memory = memory;
+    qbuf->type = type;
+
+    if (V4L2_TYPE_IS_MULTIPLANAR(type)) {
+        qbuf->length = VIRTIO_VIDEO_MAX_PLANES;
+        qbuf->m.planes = g_malloc0(sizeof(struct v4l2_plane) *
+                                   VIRTIO_VIDEO_MAX_PLANES);
+    }
+
+    return v4l2_ioctl_querybuf(fd, qbuf);
+}
+
+int v4l2_ioctl_querybuf(int fd, struct v4l2_buffer *qbuf)
+{
+    int ret;
+
+    if (!qbuf) {
+        return EINVAL;
+    }
+    
+    ret = ioctl(fd, VIDIOC_QUERYBUF, qbuf);
+    if (ret < 0) {
+        g_printerr("Unable to query buffers: %s (%d)\n",
+                   g_strerror(errno), errno);
+        return errno;
+    }
+
+    return ret;  
+}
+
+int v4l2_ioctl_un_subscribe_event(
+    int fd, struct v4l2_event_subscription *sub, unsigned long request)
 {
     int ret = 0;
-    struct v4l2_event_subscription sub;
+    unsigned long code;
 
-    memset(&sub, 0, sizeof(sub));
-    sub.type = event_type;
-    sub.id = 0;
-
-    if (event_type == V4L2_EVENT_SOURCE_CHANGE) {
-        sub.id = id;
+    if (!sub) {
+        return EINVAL;
     }
 
-    ret = ioctl(fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
+    switch (request) {
+    case VIRTIO_V4L2_IOCTL_CODE(VIDIOC_SUBSCRIBE_EVENT):
+        code = VIDIOC_SUBSCRIBE_EVENT;
+        break;
+    case VIRTIO_V4L2_IOCTL_CODE(VIDIOC_UNSUBSCRIBE_EVENT):
+        code = VIDIOC_UNSUBSCRIBE_EVENT;
+        break;
+    default:
+        return EINVAL;
+    }
+    
+    ret = ioctl(fd, code, sub);
     if (ret < 0) {
-        g_printerr("VIDIOC_SUBSCRIBE_EVENT failed: %s (%d)\n",
-                   g_strerror(errno), errno);
-        return ret;
+        g_printerr("Sending %s failed: %s (%d)\n",
+                   vv_ioctl_to_string(request), g_strerror(errno), errno);
+        return errno;
     }
 
-    g_debug("%s event(0x%x) OK", __func__, event_type);
+    g_debug("%s event(0x%x) OK", __func__, sub->type);
 
     return ret;
 }

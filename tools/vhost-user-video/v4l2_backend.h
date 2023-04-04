@@ -31,6 +31,7 @@
      || (type) == V4L2_BUF_TYPE_VIDEO_OUTPUT)
 
 /* Function protoypes */
+const char *vv_ioctl_to_string(int ioctl);
 GByteArray *create_query_cap_resp(struct virtio_video_query_capability *qcmd,
                                   GList **fmt_l, GByteArray *querycapresp);
 
@@ -40,8 +41,6 @@ int video_resource_create(struct stream *s,
 int video_send_decoder_start_cmd(struct v4l2_device *dev);
 void video_free_frame_intervals(GList *frm_intervals_l);
 void video_free_frame_sizes(GList *frm_sz_l);
-int video_enum_formats(struct v4l2_device *dev, enum v4l2_buf_type type,
-                       GList **p_fmt_list, bool only_enum_fmt);
 void video_free_formats(GList **fmt_l);
 int video_streamon(struct stream *s, struct v4l2_device *dev,
                    enum v4l2_buf_type type);
@@ -62,18 +61,16 @@ get_queue_mem_type(struct stream *s,
 
 void v4l2_set_device_type(struct v4l2_device *dev, enum v4l2_buf_type type,
                           struct v4l2_fmtdesc *fmt_desc);
-int v4l2_video_get_format(int fd, enum v4l2_buf_type type,
-                          struct v4l2_format *fmt);
 int v4l2_video_set_format(int fd, enum v4l2_buf_type type,
                           struct virtio_video_params *p);
 int v4l2_set_pixel_format(int fd, enum v4l2_buf_type buf_type,
                           uint32_t pixelformat);
 
-int v4l2_queue_buffer(enum v4l2_buf_type type,
+/*int v4l2_queue_buffer(enum v4l2_buf_type type,
                       enum v4l2_memory memory,
                       struct virtio_video_resource_queue *qcmd,
                       struct resource *res, struct stream *s,
-                      struct v4l2_device *dev);
+                      struct v4l2_device *dev);*/
 int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
                         enum v4l2_memory memory,
                         struct stream *s);
@@ -81,8 +78,6 @@ int v4l2_dequeue_buffer(int fd, enum v4l2_buf_type type,
 int v4l2_video_get_param(int fd, enum v4l2_buf_type type,
                          struct v4l2_streamparm *param);
 
-int v4l2_video_get_selection(int fd, enum v4l2_buf_type type,
-                             struct v4l2_selection *sel);
 int v4l2_video_set_selection(int fd, enum v4l2_buf_type type,
                              struct v4l2_selection *sel);
 
@@ -92,12 +87,29 @@ int v4l2_streamoff(struct stream *s, enum v4l2_buf_type type);
 int v4l2_open(const gchar *devname);
 int v4l2_close(int fd);
 
+int v4l2_video_querybuf(int fd, 
+                        unsigned int index,
+                        enum v4l2_memory memory,
+                        enum v4l2_buf_type type,
+                        struct v4l2_buffer *qbuf);
+
 /* ioctl wrappers */
-int v4l2_ioctl_query_control(int fd, uint32_t control, int32_t *value);
+int v4l2_ioctl_fmtdesc(int fd, struct v4l2_fmtdesc *fmt);
+int v4l2_ioctl_try_format(int fd, struct v4l2_format *fmt);
+int v4l2_ioctl_get_format(int fd, struct v4l2_format *fmt);
+int v4l2_ioctl_set_format(int fd, struct v4l2_format *fmt);
+int v4l2_ioctl_enum_input(int fd, struct v4l2_input *argp);
+int v4l2_ioctl_enum_output(int fd, struct v4l2_output *argp);
+int v4l2_ioctl_get_selection(int fd, struct v4l2_selection *sel);
+int v4l2_ioctl_set_selection(int fd, struct v4l2_selection *sel);
+int v4l2_ioctl_queryctrl(int fd, struct v4l2_queryctrl *ctrl);
+int v4l2_ioctl_set_get_io(int fd, int *argp, unsigned long request);
+int v4l2_ioctl_query_ext_ctrl(int fd, struct v4l2_query_ext_ctrl *ctrl);
 int v4l2_ioctl_get_control(int fd, uint32_t control, int32_t *value);
-int v4l2_ioctl_reqbuf(int fd, enum v4l2_buf_type type,
-                      enum v4l2_memory memory, int *count);
-int v4l2_ioctl_subscribe_event(int fd, uint32_t event_type, uint32_t id);
+int v4l2_ioctl_reqbuf(int fd, struct v4l2_requestbuffers *reqbuf);
+int v4l2_ioctl_querybuf(int fd, struct v4l2_buffer *qbuf);
+int v4l2_ioctl_un_subscribe_event(
+    int fd, struct v4l2_event_subscription *sub, unsigned long request);
 
 int v4l2_issue_cmd(int fd,  uint32_t cmd, uint32_t flags);
 
