@@ -72,6 +72,9 @@ if have_tools and have_vhost_user and 'CONFIG_LINUX' in config_host
   executable('vhost-user-bridge',
              sources: files('vhost-user-bridge.c'),
              dependencies: [qemuutil, vhost_user])
+  executable('vhost-user-protocol',
+             sources: files('vhost-user-protocol.c'),
+             dependencies: [qemuutil, vhost_user])
 endif
 
 test('decodetree', sh,
