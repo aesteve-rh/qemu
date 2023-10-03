@@ -213,6 +213,7 @@ static void qemu_input_event_trace(QemuConsole *src, InputEvent *evt)
     InputBtnEvent *btn;
     InputMoveEvent *move;
     InputMultiTouchEvent *mtt;
+    InputRotaryEvent *rot;
 
     if (src) {
         idx = qemu_console_get_index(src);
@@ -255,6 +256,11 @@ static void qemu_input_event_trace(QemuConsole *src, InputEvent *evt)
         mtt = evt->u.mtt.data;
         name = InputAxis_str(mtt->axis);
         trace_input_event_mtt(idx, name, mtt->value);
+        break;
+    case INPUT_EVENT_KIND_ROT:
+        rot = evt->u.rot.data;
+        name = InputRotaryType_str(rot->type);
+        //trace_input_event_rot(idx, name, rot->value);
         break;
     case INPUT_EVENT_KIND__MAX:
         /* keep gcc happy */
@@ -514,6 +520,38 @@ int qemu_input_scale_axis(int value,
         return min_out + range_out / 2;
     }
     return ((int64_t)value - min_in) * range_out / range_in + min_out;
+}
+
+static void
+qemu_input_queue_rotary(QemuConsole *src, InputRotaryEvent *rot)
+{
+    InputEvent evt = {
+        .type = INPUT_EVENT_KIND_ROT,
+        .u.rot.data = rot,
+    };
+
+    qemu_input_event_send(src, &evt);  
+}
+
+void qemu_input_queue_nudge(QemuConsole *src, InputRotaryButton key, int value)
+{
+    InputRotaryEvent rot = {
+        .type = INPUT_ROTARY_TYPE_NUDGE,
+        .key = key,
+        .value = value,
+    };
+
+    qemu_input_queue_rotary(src, &rot);
+}
+
+void qemu_input_queue_rotate(QemuConsole *src, int value)
+{
+    InputRotaryEvent rot = {
+        .type = INPUT_ROTARY_TYPE_ROTATE,
+        .value = value,
+    };
+
+    qemu_input_queue_rotary(src, &rot); 
 }
 
 void qemu_input_queue_rel(QemuConsole *src, InputAxis axis, int value)

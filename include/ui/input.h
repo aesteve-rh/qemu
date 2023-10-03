@@ -9,6 +9,7 @@
 #define INPUT_EVENT_MASK_REL   (1<<INPUT_EVENT_KIND_REL)
 #define INPUT_EVENT_MASK_ABS   (1<<INPUT_EVENT_KIND_ABS)
 #define INPUT_EVENT_MASK_MTT   (1<<INPUT_EVENT_KIND_MTT)
+#define INPUT_EVENT_MASK_ROT   (1<<INPUT_EVENT_KIND_ROT)
 
 #define INPUT_EVENT_ABS_MIN    0x0000
 #define INPUT_EVENT_ABS_MAX    0x7FFF
@@ -69,7 +70,8 @@ void qemu_input_queue_mtt(QemuConsole *src, InputMultiTouchType type, int slot,
 void qemu_input_queue_mtt_abs(QemuConsole *src, InputAxis axis, int value,
                               int min_in, int max_in,
                               int slot, int tracking_id);
-
+void qemu_input_queue_nudge(QemuConsole *src, InputRotaryButton key, int value);
+void qemu_input_queue_rotate(QemuConsole *src, int value);
 void qemu_input_check_mode_change(void);
 void qemu_add_mouse_mode_change_notifier(Notifier *notify);
 void qemu_remove_mouse_mode_change_notifier(Notifier *notify);

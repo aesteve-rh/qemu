@@ -20,6 +20,15 @@
 #define VIRTIO_ID_NAME_MOUSE        "QEMU Virtio Mouse"
 #define VIRTIO_ID_NAME_TABLET       "QEMU Virtio Tablet"
 #define VIRTIO_ID_NAME_MULTITOUCH   "QEMU Virtio MultiTouch"
+#define VIRTIO_ID_NAME_ROTARY       "QEMU Virtio Rotary"
+
+/// Android Types
+#define ANDROID_ROTARY_NUDGE_LEFT       282
+#define ANDROID_ROTARY_NUDGE_RIGHT      283
+#define ANDROID_ROTARY_NUDGE_UP         280
+#define ANDROID_ROTARY_NUDGE_DOWN       281
+#define ANDROID_ROTARY_CENTER           23
+#define ANDROID_ROTARY_BACK             4
 
 /* ----------------------------------------------------------------- */
 
@@ -32,6 +41,15 @@ static const unsigned short keymap_button[INPUT_BUTTON__MAX] = {
     [INPUT_BUTTON_SIDE]              = BTN_SIDE,
     [INPUT_BUTTON_EXTRA]             = BTN_EXTRA,
     [INPUT_BUTTON_TOUCH]             = BTN_TOUCH,
+};
+
+static const unsigned short rotary_button[INPUT_ROTARY_BUTTON__MAX] = {
+    [INPUT_ROTARY_BUTTON_LEFT]        = ANDROID_ROTARY_NUDGE_LEFT,
+    [INPUT_ROTARY_BUTTON_RIGHT]       = ANDROID_ROTARY_NUDGE_RIGHT,
+    [INPUT_ROTARY_BUTTON_UP]          = ANDROID_ROTARY_NUDGE_UP,
+    [INPUT_ROTARY_BUTTON_DOWN]        = ANDROID_ROTARY_NUDGE_DOWN,
+    [INPUT_ROTARY_BUTTON_CENTER]      = ANDROID_ROTARY_CENTER,
+    [INPUT_ROTARY_BUTTON_BACK]        = ANDROID_ROTARY_BACK,
 };
 
 static const unsigned short axismap_rel[INPUT_AXIS__MAX] = {
@@ -89,6 +107,7 @@ static void virtio_input_handle_event(DeviceState *dev, QemuConsole *src,
     InputMoveEvent *move;
     InputBtnEvent *btn;
     InputMultiTouchEvent *mtt;
+    InputRotaryEvent *rot;
 
     switch (evt->type) {
     case INPUT_EVENT_KIND_KEY:
@@ -161,6 +180,29 @@ static void virtio_input_handle_event(DeviceState *dev, QemuConsole *src,
             event.code  = cpu_to_le16(ABS_MT_TRACKING_ID);
             event.value = cpu_to_le32(mtt->tracking_id);
             virtio_input_send(vinput, &event);
+        }
+        break;
+    case INPUT_EVENT_KIND_ROT:
+        rot = evt->u.rot.data;
+        if (rot->type == INPUT_ROTARY_TYPE_ROTATE) {
+            fprintf(stderr, "rotary event!\n");
+            event.type  = cpu_to_le16(EV_REL);
+            event.code  = cpu_to_le16(REL_WHEEL);
+            event.value = cpu_to_le32(rot->value);
+            virtio_input_send(vinput, &event);
+        } else {
+            if (rotary_button[rot->key]) {
+                fprintf(stderr, "rotary key event: %d\n", rotary_button[rot->key]);
+                event.type  = cpu_to_le16(EV_KEY);
+                event.code  = cpu_to_le16(rotary_button[rot->key]);
+                event.value = cpu_to_le32(rot->value ? 1 : 0);
+                virtio_input_send(vinput, &event);
+            } else {
+                if (rot->value) {
+                    fprintf(stderr, "%s: unmapped key: %d [%s]\n", __func__,
+                            rot->key, InputRotaryButton_str(rot->key));
+                }
+            }
         }
         break;
     default:
@@ -626,6 +668,60 @@ static const TypeInfo virtio_multitouch_info = {
 
 /* ----------------------------------------------------------------- */
 
+static QemuInputHandler virtio_rotary_handler = {
+    .name  = VIRTIO_ID_NAME_ROTARY,
+    .mask  = INPUT_EVENT_MASK_ROT,
+    .event = virtio_input_handle_event,
+    .sync  = virtio_input_handle_sync,
+};
+
+static struct virtio_input_config virtio_rotary_config[] = {
+    {
+        .select    = VIRTIO_INPUT_CFG_ID_NAME,
+        .size      = sizeof(VIRTIO_ID_NAME_ROTARY),
+        .u.string  = VIRTIO_ID_NAME_ROTARY,
+    },{
+        .select    = VIRTIO_INPUT_CFG_ID_DEVIDS,
+        .size      = sizeof(struct virtio_input_devids),
+        .u.ids     = {
+            .bustype = const_le16(BUS_VIRTUAL),
+            .vendor  = const_le16(0x0627), /* same we use for usb hid devices */
+            .product = const_le16(0x0000),
+            .version = const_le16(0x0000),
+        },
+    },{
+        .select    = VIRTIO_INPUT_CFG_EV_BITS,
+        .subsel    = EV_REL,
+        .size      = 2,
+        .u.bitmap  = {
+            0,
+            (1 << (REL_WHEEL - 8))
+        },
+    },
+    { /* end of list */ },
+};
+
+static void virtio_input_rotary_init(Object *obj)
+{
+    VirtIOInputHID *vhid = VIRTIO_INPUT_HID(obj);
+    VirtIOInput *vinput = VIRTIO_INPUT(obj);
+
+    vhid->handler = &virtio_rotary_handler;
+    virtio_input_init_config(vinput, virtio_rotary_config);
+    virtio_input_extend_config(vinput, rotary_button,
+                               ARRAY_SIZE(rotary_button),
+                               VIRTIO_INPUT_CFG_EV_BITS, EV_KEY);
+}
+
+static const TypeInfo virtio_rotary_info = {
+    .name          = TYPE_VIRTIO_ROTARY,
+    .parent        = TYPE_VIRTIO_INPUT_HID,
+    .instance_size = sizeof(VirtIOInputHID),
+    .instance_init = virtio_input_rotary_init,
+};
+
+/* ----------------------------------------------------------------- */
+
 static void virtio_register_types(void)
 {
     type_register_static(&virtio_input_hid_info);
@@ -633,6 +729,7 @@ static void virtio_register_types(void)
     type_register_static(&virtio_mouse_info);
     type_register_static(&virtio_tablet_info);
     type_register_static(&virtio_multitouch_info);
+    type_register_static(&virtio_rotary_info);
 }
 
 type_init(virtio_register_types)

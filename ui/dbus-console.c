@@ -45,6 +45,7 @@ struct _DBusDisplayConsole {
     QemuDBusDisplay1Console *iface;
 
     QemuDBusDisplay1Keyboard *iface_kbd;
+    QemuDBusDisplay1Rotary *iface_rotary;
     QKbdState *kbd;
 
     QemuDBusDisplay1Mouse *iface_mouse;
@@ -153,6 +154,7 @@ dbus_display_console_dispose(GObject *object)
     g_clear_object(&ddc->iface_touch);
     g_clear_object(&ddc->iface_mouse);
     g_clear_object(&ddc->iface_kbd);
+    g_clear_object(&ddc->iface_rotary);
     g_clear_object(&ddc->iface);
     g_clear_pointer(&ddc->listeners, g_hash_table_unref);
     g_clear_pointer(&ddc->kbd, qkbd_state_free);
@@ -380,6 +382,60 @@ dbus_kbd_qemu_leds_updated(void *data, int ledstate)
 }
 
 static gboolean
+dbus_rotary_press(DBusDisplayConsole *ddc,
+               GDBusMethodInvocation *invocation,
+               guint arg_keycode)
+{
+    trace_dbus_rotary_press(arg_keycode);
+
+    qemu_input_queue_nudge(ddc->dcl.con, (InputRotaryButton) arg_keycode, true);
+    qemu_input_event_sync();
+
+    qemu_dbus_display1_rotary_complete_press(ddc->iface_rotary, invocation);
+
+    return DBUS_METHOD_INVOCATION_HANDLED;
+}
+
+static gboolean
+dbus_rotary_release(DBusDisplayConsole *ddc,
+                 GDBusMethodInvocation *invocation,
+                 guint arg_keycode)
+{
+    trace_dbus_rotary_release(arg_keycode);
+
+    qemu_input_queue_nudge(ddc->dcl.con, (InputRotaryButton) arg_keycode, false);
+    qemu_input_event_sync();
+
+    qemu_dbus_display1_rotary_complete_release(ddc->iface_rotary, invocation);
+
+    return DBUS_METHOD_INVOCATION_HANDLED;
+}
+
+static gboolean
+dbus_rotary_rel_motion(DBusDisplayConsole *ddc,
+                      GDBusMethodInvocation *invocation,
+                      int delta)
+{
+    trace_dbus_rotary_wheel(delta);
+
+    if (qemu_input_is_absolute(ddc->dcl.con)) {
+        g_dbus_method_invocation_return_error(
+            invocation, DBUS_DISPLAY_ERROR,
+            DBUS_DISPLAY_ERROR_INVALID,
+            "Rotary is not relative");
+        return DBUS_METHOD_INVOCATION_HANDLED;
+    }
+
+    qemu_input_queue_rotate(ddc->dcl.con, delta);
+    qemu_input_event_sync();
+
+    qemu_dbus_display1_rotary_complete_rel_motion(ddc->iface_rotary,
+                                                    invocation);
+
+    return DBUS_METHOD_INVOCATION_HANDLED;
+}
+
+static gboolean
 dbus_mouse_rel_motion(DBusDisplayConsole *ddc,
                       GDBusMethodInvocation *invocation,
                       int dx, int dy)
@@ -544,6 +600,7 @@ dbus_display_console_new(DBusDisplay *display, QemuConsole *con)
         "org.qemu.Display1.Keyboard",
         "org.qemu.Display1.Mouse",
         "org.qemu.Display1.MultiTouch",
+        "org.qemu.Display1.Rotary",
         NULL
     };
 
@@ -614,6 +671,15 @@ dbus_display_console_new(DBusDisplay *display, QemuConsole *con)
         struct touch_slot *slot = &touch_slots[i];
         slot->tracking_id = -1;
     }
+
+    ddc->iface_rotary = qemu_dbus_display1_rotary_skeleton_new();
+    g_object_connect(ddc->iface_rotary,
+        "swapped-signal::handle-rel-motion", dbus_rotary_rel_motion, ddc,
+        "swapped-signal::handle-press", dbus_rotary_press, ddc,
+        "swapped-signal::handle-release", dbus_rotary_release, ddc,
+        NULL);
+    g_dbus_object_skeleton_add_interface(G_DBUS_OBJECT_SKELETON(ddc),
+        G_DBUS_INTERFACE_SKELETON(ddc->iface_rotary));
 
     register_displaychangelistener(&ddc->dcl);
     ddc->mouse_mode_notifier.notify = dbus_mouse_mode_change;

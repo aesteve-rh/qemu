@@ -1063,6 +1063,16 @@
   'data'  : [ 'left', 'middle', 'right', 'wheel-up', 'wheel-down', 'side',
   'extra', 'wheel-left', 'wheel-right', 'touch' ] }
 
+  ##
+  # @InputRotaryButton:
+  #
+  # Button of a rotary controller device.
+  #
+  # Since: 8.2
+  ##
+{ 'enum'  : 'InputRotaryButton',
+  'data'  : [ 'left', 'right', 'up', 'down', 'center', 'back' ] }
+
 ##
 # @InputAxis:
 #
@@ -1083,6 +1093,15 @@
 { 'enum'  : 'InputMultiTouchType',
   'data'  : [ 'begin', 'update', 'end', 'cancel', 'data' ] }
 
+##
+# @InputRotaryType:
+#
+# Type of a rotary event.
+#
+# Since: 8.2
+##
+{ 'enum'  : 'InputRotaryType',
+  'data'  : [ 'rotate', 'nudge' ] }
 
 ##
 # @InputKeyEvent:
@@ -1131,6 +1150,27 @@
               'value'   : 'int' } }
 
 ##
+# @InputRotaryEvent:
+#
+# Rotary controller rotate event for fine navigation in the UI.
+#
+#
+# @value: number of detents (clicks), positive for clockwise,
+#     negative for counterclockwise
+#
+# @display: target display defined in VehicleDisplay. Events not
+#     tied to specific display must be sent to
+#     VehicleDisplay#MAIN.
+#
+# Since: 8.2
+##
+{ 'struct'  : 'InputRotaryEvent',
+  'data'  : { 'type'    : 'InputRotaryType',
+              'key'     : 'InputRotaryButton',
+              'value'   : 'int',
+              'display' : 'int' } }
+
+##
 # @InputMultiTouchEvent:
 #
 # MultiTouch input event.
@@ -1166,10 +1206,12 @@
 #
 # @mtt: a multi-touch input event
 #
+# @rot: a rotary input event
+#
 # Since: 2.0
 ##
 { 'enum': 'InputEventKind',
-  'data': [ 'key', 'btn', 'rel', 'abs', 'mtt' ] }
+  'data': [ 'key', 'btn', 'rel', 'abs', 'mtt', 'rot' ] }
 
 ##
 # @InputKeyEventWrapper:
@@ -1204,6 +1246,14 @@
   'data': { 'data': 'InputMultiTouchEvent' } }
 
 ##
+# @InputRotaryEventWrapper:
+#
+# Since: 8.2
+##
+{ 'struct': 'InputRotaryEventWrapper',
+  'data': { 'data': 'InputRotaryEvent' } }
+
+##
 # @InputEvent:
 #
 # Input event union.
@@ -1219,7 +1269,8 @@
               'btn'     : 'InputBtnEventWrapper',
               'rel'     : 'InputMoveEventWrapper',
               'abs'     : 'InputMoveEventWrapper',
-              'mtt'     : 'InputMultiTouchEventWrapper' } }
+              'mtt'     : 'InputMultiTouchEventWrapper',
+              'rot'     : 'InputRotaryEventWrapper' } }
 
 ##
 # @input-send-event:

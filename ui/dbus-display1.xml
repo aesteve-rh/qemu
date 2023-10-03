@@ -54,8 +54,9 @@
 
       Interactions with a console may be done with
       :dbus:iface:`org.qemu.Display1.Keyboard`,
-      :dbus:iface:`org.qemu.Display1.Mouse` and
-      :dbus:iface:`org.qemu.Display1.MultiTouch` interfaces when available.
+      :dbus:iface:`org.qemu.Display1.Mouse`,
+      :dbus:iface:`org.qemu.Display1.MultiTouch` and
+      :dbus:iface:`org.qemu.Display1.Rotary` interfaces when available.
   -->
   <interface name="org.qemu.Display1.Console">
     <!--
@@ -311,6 +312,49 @@
         The maximum number of slots.
     -->
     <property name="MaxSlots" type="i" access="read"/>
+  </interface>
+
+  <!--
+      org.qemu.Display1.Rotary:
+
+      This interface is optionally implemented on
+      ``/org/qemu/Display1/Console_$id`` (see
+      :dbus:iface:`~org.qemu.Display1.Console`).
+  -->
+  <interface name="org.qemu.Display1.Rotary">
+    <!--
+        Press:
+        @keycode: QEMU key number (xtkbd + special re-encoding of high bit)
+
+        Send a key press event.
+    -->
+    <method name="Press">
+      <arg type="u" name="keycode" direction="in"/>
+    </method>
+
+    <!--
+        Release:
+        @keycode: QEMU key number (xtkbd + special re-encoding of high bit)
+
+        Send a key release event.
+    -->
+    <method name="Release">
+      <arg type="u" name="keycode" direction="in"/>
+    </method>
+
+    <!--
+        RelMotion:
+        @delta: delta, in detents.
+
+        Rotate the rotary controller. Positive values rotate clockwise.
+        Negative values rotate counterclockwise.
+
+        Returns an error if :dbus:prop:`IsAbsolute`.
+    -->
+    <method name="RelMotion">
+      <arg type="i" name="delta" direction="in"/>
+    </method>
+
   </interface>
 
   <!--

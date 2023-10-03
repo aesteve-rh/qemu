@@ -23,6 +23,7 @@ void replay_save_input_event(InputEvent *evt)
     InputBtnEvent *btn;
     InputMoveEvent *move;
     InputMultiTouchEvent *mtt;
+    InputRotaryEvent *rot;
     replay_put_dword(evt->type);
 
     switch (evt->type) {
@@ -67,6 +68,11 @@ void replay_save_input_event(InputEvent *evt)
         replay_put_dword(mtt->axis);
         replay_put_qword(mtt->value);
         break;
+    case INPUT_EVENT_KIND_ROT:
+        rot = evt->u.rot.data;
+        replay_put_dword(rot->type);
+        replay_put_qword(rot->value);
+        break;
     case INPUT_EVENT_KIND__MAX:
         /* keep gcc happy */
         break;
@@ -83,6 +89,7 @@ InputEvent *replay_read_input_event(void)
     InputMoveEvent rel;
     InputMoveEvent abs;
     InputMultiTouchEvent mtt;
+    InputRotaryEvent rot;
 
     evt.type = replay_get_dword();
     switch (evt.type) {
@@ -126,6 +133,11 @@ InputEvent *replay_read_input_event(void)
         evt.u.mtt.data->tracking_id = replay_get_qword();
         evt.u.mtt.data->axis = (InputAxis)replay_get_dword();
         evt.u.mtt.data->value = replay_get_qword();
+        break;
+    case INPUT_EVENT_KIND_ROT:
+        evt.u.rot.data = &rot;
+        evt.u.rot.data->type = (InputRotaryType)replay_get_dword();
+        evt.u.rot.data->value = replay_get_qword();
         break;
     case INPUT_EVENT_KIND__MAX:
         /* keep gcc happy */
