@@ -10,7 +10,7 @@
 #define _VHOST_USER_MEDIA_H_
 
 #include "standard-headers/linux/virtio_ids.h"
-//#include "standard-headers/linux/virtio_media.h"
+#include "standard-headers/linux/virtio_media.h"
 #include "hw/virtio/virtio.h"
 #include "hw/virtio/vhost.h"
 #include "hw/virtio/vhost-user.h"
@@ -21,9 +21,9 @@
         OBJECT_CHECK(VHostUserMEDIA, (obj), TYPE_VHOST_USER_MEDIA)
 
 struct virtio_media_config {
-    __le32 device_caps;
-    __le32 device_type;
-    __u8 card[32];
+    uint32_t device_caps;
+    uint32_t device_type;
+    uint8_t card[32];
 };
 
 typedef struct {

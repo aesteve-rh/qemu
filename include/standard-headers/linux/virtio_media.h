@@ -22,8 +22,8 @@
  * @__padding: must be set to zero by the guest.
  */
 struct virtio_media_cmd_header {
-	u32 cmd;
-	u32 __padding;
+	uint32_t cmd;
+	uint32_t __padding;
 };
 
 /**
@@ -34,8 +34,8 @@ struct virtio_media_cmd_header {
  * @__padding: must be set to zero by the device.
  */
 struct virtio_media_resp_header {
-	u32 status;
-	u32 __padding;
+	uint32_t status;
+	uint32_t __padding;
 };
 
 /**
@@ -65,8 +65,8 @@ struct virtio_media_cmd_open {
  */
 struct virtio_media_resp_open {
 	struct virtio_media_resp_header hdr;
-	u32 session_id;
-	u32 __padding;
+	uint32_t session_id;
+	uint32_t __padding;
 };
 
 /**
@@ -88,8 +88,8 @@ struct virtio_media_resp_open {
  */
 struct virtio_media_cmd_close {
 	struct virtio_media_cmd_header hdr;
-	u32 session_id;
-	u32 __padding;
+	uint32_t session_id;
+	uint32_t __padding;
 };
 
 /**
@@ -127,8 +127,8 @@ struct virtio_media_cmd_close {
  */
 struct virtio_media_cmd_ioctl {
 	struct virtio_media_cmd_header hdr;
-	u32 session_id;
-	u32 code;
+	uint32_t session_id;
+	uint32_t code;
 };
 
 /**
@@ -153,9 +153,9 @@ struct virtio_media_resp_ioctl {
  */
 struct virtio_media_cmd_mmap {
 	struct virtio_media_cmd_header hdr;
-	u32 session_id;
-	u32 flags;
-	u64 offset;
+	uint32_t session_id;
+	uint32_t flags;
+	uint64_t offset;
 };
 
 /**
@@ -167,8 +167,8 @@ struct virtio_media_cmd_mmap {
  */
 struct virtio_media_resp_mmap {
 	struct virtio_media_resp_header hdr;
-	u64 addr;
-	u64 len;
+	uint64_t addr;
+	uint64_t len;
 };
 
 /**
@@ -184,7 +184,7 @@ struct virtio_media_resp_mmap {
  */
 struct virtio_media_cmd_munmap {
 	struct virtio_media_cmd_header hdr;
-	u64 guest_addr;
+	uint64_t guest_addr;
 };
 
 /**
@@ -207,8 +207,8 @@ struct virtio_media_resp_munmap {
  * @session_id: ID of the session the event applies to.
  */
 struct virtio_media_event_header {
-	u32 event;
-	u32 session_id;
+	uint32_t event;
+	uint32_t session_id;
 };
 
 /**
@@ -221,8 +221,8 @@ struct virtio_media_event_header {
  */
 struct virtio_media_event_error {
 	struct virtio_media_event_header hdr;
-	u32 errno;
-	u32 __padding;
+	//uint32_t errno;
+	uint32_t __padding;
 };
 
 /**
