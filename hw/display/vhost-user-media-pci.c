@@ -7,13 +7,21 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu/error-report.h"
 #include "hw/qdev-properties.h"
 #include "hw/virtio/vhost-user-media.h"
 #include "hw/virtio/virtio-pci.h"
 
+#define VIRTIO_MEDIA_PCI_CACHE_BAR 2
+
+#define VIRTIO_MEDIA_PCI_SHMCAP_ID_CACHE 0
+
+#define CACHE_SIZE 1ull << 30
+
 struct VHostUserMEDIAPCI {
     VirtIOPCIProxy parent_obj;
     VHostUserMEDIA vdev;
+    MemoryRegion cachebar;
 };
 
 typedef struct VHostUserMEDIAPCI VHostUserMEDIAPCI;
@@ -34,14 +42,32 @@ static Property vumedia_pci_properties[] = {
 static void vumedia_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
 {
     VHostUserMEDIAPCI *dev = VHOST_USER_MEDIA_PCI(vpci_dev);
-    DeviceState *vdev = DEVICE(&dev->vdev);
+    DeviceState *dev_state = DEVICE(&dev->vdev);
+    VirtIODevice *vdev = VIRTIO_DEVICE(dev_state);
 
     if (vpci_dev->nvectors == DEV_NVECTORS_UNSPECIFIED) {
         vpci_dev->nvectors = 1;
     }
 
-    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus), errp);
-    object_property_set_bool(OBJECT(vdev), "realized", true, errp);
+    qdev_set_parent_bus(dev_state, BUS(&vpci_dev->bus), errp);
+    object_property_set_bool(OBJECT(dev_state), "realized", true, errp);
+
+    /*
+     * The bar starts with the data cache
+     * followed by the metadata cache.
+     */
+    memory_region_init(&dev->cachebar, OBJECT(vpci_dev),
+                       "vhost-media-pci-cachebar", CACHE_SIZE);
+    memory_region_add_subregion(&dev->cachebar, 0, &vdev->shmem_list[vdev->n_shmem_regions - 1]);
+    virtio_pci_add_shm_cap(vpci_dev, VIRTIO_MEDIA_PCI_CACHE_BAR, 0,
+                            CACHE_SIZE, VIRTIO_MEDIA_PCI_SHMCAP_ID_CACHE);
+
+    /* After 'realized' so the memory region exists */
+    pci_register_bar(&vpci_dev->pci_dev, VIRTIO_MEDIA_PCI_CACHE_BAR,
+                     PCI_BASE_ADDRESS_SPACE_MEMORY |
+                     PCI_BASE_ADDRESS_MEM_PREFETCH |
+                     PCI_BASE_ADDRESS_MEM_TYPE_64,
+                     &dev->cachebar);
 }
 
 static void vumedia_pci_class_init(ObjectClass *klass, void *data)
