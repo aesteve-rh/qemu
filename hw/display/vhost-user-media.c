@@ -20,6 +20,8 @@
 #include "qemu/error-report.h"
 
 #define MAX_CAPS_LEN 4096
+#define CACHE_SIZE 1ull << 32
+
 
 static const int feature_bits[] = {
     VIRTIO_F_RING_RESET,
@@ -291,6 +293,8 @@ static void vhost_user_media_device_realize(DeviceState *dev, Error **errp)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
     VHostUserMEDIA *media = VHOST_USER_MEDIA(dev);
+    void *cache_ptr;
+    MemoryRegion *mr;
     int ret;
 
     if (!media->conf.chardev.chr) {
@@ -303,6 +307,22 @@ static void vhost_user_media_device_realize(DeviceState *dev, Error **errp)
     }
 
     virtio_init(vdev, VIRTIO_ID_MEDIA, sizeof(struct virtio_media_config));
+
+    cache_ptr = mmap(NULL, CACHE_SIZE, PROT_READ,
+                         MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if (cache_ptr == MAP_FAILED) {
+        error_setg(errp, "Unable to mmap blank cache");
+        return;
+    }
+    ++vdev->n_shmem_regions;
+    vdev->shmem_list = g_renew(MemoryRegion, vdev->shmem_list,
+                               vdev->n_shmem_regions);
+    mr = g_new0(MemoryRegion, 1);
+    vdev->shmem_list[vdev->n_shmem_regions - 1] = *mr;
+    memory_region_init_ram_ptr(&vdev->shmem_list[vdev->n_shmem_regions - 1],
+                               OBJECT(vdev),
+                               "virtio-media-cache",
+                               CACHE_SIZE, cache_ptr);
 
     /* one command queue and one event queue */
     media->vhost_dev.nvqs = 2;
