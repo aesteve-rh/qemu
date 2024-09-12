@@ -3063,15 +3063,52 @@ int virtio_save(VirtIODevice *vdev, QEMUFile *f)
     return vmstate_save_state(f, &vmstate_virtio, vdev, NULL);
 }
 
-MemoryRegion *virtio_new_shmem_region(VirtIODevice *vdev)
+VirtSharedMemory *virtio_new_shmem_region(VirtIODevice *vdev)
 {
-    MemoryRegion *mr;
+    VirtSharedMemory *shmem = NULL;
     ++vdev->n_shmem_regions;
-    vdev->shmem_list = g_renew(MemoryRegion, vdev->shmem_list,
+    vdev->shmem_list = g_renew(VirtSharedMemory, vdev->shmem_list,
                                vdev->n_shmem_regions);
-    mr = &vdev->shmem_list[vdev->n_shmem_regions - 1];
-    mr = g_new0(MemoryRegion, 1);
-    return mr;
+    shmem = &vdev->shmem_list[vdev->n_shmem_regions - 1];
+    shmem = g_new0(VirtSharedMemory, 1);
+    QTAILQ_INIT(&shmem->mapped_regions);
+    return shmem;
+}
+
+void virtio_add_shmem_map(VirtSharedMemory *shmem, hwaddr offset,
+                          uint64_t size)
+{
+    MappedMemoryRegion *mmap = g_new0(MappedMemoryRegion, 1);
+    mmap->offset = offset;
+    mmap->size = int128_make64(size);
+    QTAILQ_REMOVE(&shmem->mapped_regions, mmap, link);
+    g_free(mmap);
+}
+
+void virtio_del_shmem_map(VirtSharedMemory *shmem, hwaddr offset,
+                          uint64_t size)
+{
+    MappedMemoryRegion *mmap = g_new0(MappedMemoryRegion, 1);
+    mmap->offset = offset;
+    mmap->size = int128_make64(size);
+    QTAILQ_INSERT_TAIL(&shmem->mapped_regions, mmap, link);
+    g_free(mmap);
+}
+
+bool virtio_shmem_map_overlaps(VirtSharedMemory *shmem, hwaddr offset,
+                               uint64_t size)
+{
+    MappedMemoryRegion *map_reg;
+    hwaddr new_reg_end = offset + size;
+    QTAILQ_FOREACH(map_reg, &shmem->mapped_regions, link) {
+        hwaddr region_end = map_reg->offset + map_reg->size;
+        if ((map_reg->offset == offset) ||
+            (map_reg->offset < offset && region_end >= offset) ||
+            (offset < map_reg->offset && new_reg_end >= map_reg->offset )) {
+            return true;
+        }
+    }
+    return false;   
 }
 
 /* A wrapper for use as a VMState .put function */
@@ -4011,11 +4048,20 @@ static void virtio_device_free_virtqueues(VirtIODevice *vdev)
 static void virtio_device_instance_finalize(Object *obj)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(obj);
+    VirtSharedMemory *shmem = NULL;
+    int i;
 
     virtio_device_free_virtqueues(vdev);
 
     g_free(vdev->config);
     g_free(vdev->vector_queues);
+    for (i = 0; i< vdev->n_shmem_regions; i++) {
+        shmem = &vdev->shmem_list[i];
+        while (!QTAILQ_EMPTY(&shmem->mapped_regions)) {
+            MappedMemoryRegion *mmap_reg = QTAILQ_FIRST(&shmem->mapped_regions);
+            QTAILQ_REMOVE(&shmem->mapped_regions, mmap_reg, link);
+        }
+    }
 }
 
 static Property virtio_properties[] = {

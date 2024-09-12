@@ -1797,7 +1797,7 @@ vhost_user_backend_handle_shmem_map(struct vhost_dev *dev,
                                     int fd)
 {
     void *addr = 0;
-    MemoryRegion *mr = NULL;
+    VirtSharedMemory *shmem = NULL;
 
     if (fd < 0) {
         error_report("Bad fd for map");
@@ -1812,22 +1812,29 @@ vhost_user_backend_handle_shmem_map(struct vhost_dev *dev,
         return -EFAULT;
     }
 
-    mr = &dev->vdev->shmem_list[vu_mmap->shmid];
+    shmem = &dev->vdev->shmem_list[vu_mmap->shmid];
 
-    if (!mr) {
+    if (!shmem) {
         error_report("VIRTIO Shared Memory Region at "
                      "ID %d unitialized", vu_mmap->shmid);
         return -EFAULT;
     }
 
     if ((vu_mmap->shm_offset + vu_mmap->len) < vu_mmap->len ||
-        (vu_mmap->shm_offset + vu_mmap->len) > mr->size) {
+        (vu_mmap->shm_offset + vu_mmap->len) > shmem->mr->size) {
         error_report("Bad offset/len for mmap %" PRIx64 "+%" PRIx64,
                      vu_mmap->shm_offset, vu_mmap->len);
         return -EFAULT;
     }
 
-    void *shmem_ptr = memory_region_get_ram_ptr(mr);
+    if (virtio_shmem_map_overlaps(shmem, vu_mmap->shm_offset, vu_mmap->len)) {
+        error_report("Requested memory (%" PRIx64 "+%" PRIx64 ") overalps "
+                     "with previously mapped memory",
+                     vu_mmap->shm_offset, vu_mmap->len);
+        return -EFAULT;
+    }
+
+    void *shmem_ptr = memory_region_get_ram_ptr(shmem->mr);
 
     addr = mmap(shmem_ptr + vu_mmap->shm_offset, vu_mmap->len,
         ((vu_mmap->flags & VHOST_USER_FLAG_MAP_R) ? PROT_READ : 0) |
@@ -1839,6 +1846,8 @@ vhost_user_backend_handle_shmem_map(struct vhost_dev *dev,
         return -EFAULT;
     }
 
+    virtio_add_shmem_map(shmem, vu_mmap->shm_offset, vu_mmap->len);
+
     return 0;
 }
 
@@ -1847,7 +1856,7 @@ vhost_user_backend_handle_shmem_unmap(struct vhost_dev *dev,
                                       VhostUserMMap *vu_mmap)
 {
     void *addr = 0;
-    MemoryRegion *mr = NULL;
+    VirtSharedMemory *shmem = NULL;
 
     if (!dev->vdev->shmem_list ||
         dev->vdev->n_shmem_regions <= vu_mmap->shmid) {
@@ -1857,22 +1866,22 @@ vhost_user_backend_handle_shmem_unmap(struct vhost_dev *dev,
         return -EFAULT;
     }
 
-    mr = &dev->vdev->shmem_list[vu_mmap->shmid];
+    shmem = &dev->vdev->shmem_list[vu_mmap->shmid];
 
-    if (!mr) {
+    if (!shmem) {
         error_report("VIRTIO Shared Memory Region at "
                      "ID %d unitialized", vu_mmap->shmid);
         return -EFAULT;
     }
 
     if ((vu_mmap->shm_offset + vu_mmap->len) < vu_mmap->len ||
-        (vu_mmap->shm_offset + vu_mmap->len) > mr->size) {
+        (vu_mmap->shm_offset + vu_mmap->len) > shmem->mr->size) {
         error_report("Bad offset/len for mmap %" PRIx64 "+%" PRIx64,
                      vu_mmap->shm_offset, vu_mmap->len);
         return -EFAULT;
     }
 
-    void *shmem_ptr = memory_region_get_ram_ptr(mr);
+    void *shmem_ptr = memory_region_get_ram_ptr(shmem->mr);
 
     addr = mmap(shmem_ptr + vu_mmap->shm_offset, vu_mmap->len,
                 PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
@@ -1881,6 +1890,8 @@ vhost_user_backend_handle_shmem_unmap(struct vhost_dev *dev,
         error_report("Failed to unmap memory");
         return -EFAULT;
     }
+
+    virtio_del_shmem_map(shmem, vu_mmap->shm_offset, vu_mmap->len);
 
     return 0;
 }
