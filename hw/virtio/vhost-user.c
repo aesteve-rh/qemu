@@ -57,8 +57,6 @@
  */
 #define VHOST_USER_MAX_CONFIG_SIZE 256
 
-#define VHOST_USER_MAX_SHMEM_REGIONS 256
-
 #define VHOST_USER_PROTOCOL_FEATURE_MASK ((1 << VHOST_USER_PROTOCOL_F_MAX) - 1)
 
 typedef enum VhostUserRequest {
@@ -146,7 +144,7 @@ typedef struct VhostUserMemRegMsg {
 typedef struct VhostUserShMemConfig {
     uint32_t nregions;
     uint32_t padding;
-    uint64_t memory_sizes[VHOST_MEMORY_BASELINE_NREGIONS];
+    uint64_t memory_sizes[VIRTIO_MAX_SHMEM_REGIONS];
 } VhostUserShMemConfig;
 
 typedef struct VhostUserMemRWMsg {
@@ -1901,8 +1899,15 @@ vhost_user_backend_handle_shmem_unmap(struct vhost_dev *dev,
 
     if ((vu_mmap->shm_offset + vu_mmap->len) < vu_mmap->len ||
         (vu_mmap->shm_offset + vu_mmap->len) > shmem->mr->size) {
-        error_report("Bad offset/len for mmap %" PRIx64 "+%" PRIx64,
+        error_report("Bad offset/len for unmmap %" PRIx64 "+%" PRIx64,
                      vu_mmap->shm_offset, vu_mmap->len);
+        return -EFAULT;
+    }
+
+    if (!virtio_shmem_map_matches(shmem, vu_mmap->shm_offset, vu_mmap->len)) {
+        error_report("Requested offset/len for unmap (%" PRIx64 "+%" PRIx64") "
+                     "does not match any previously mapped region",
+                    vu_mmap->shm_offset, vu_mmap->len);
         return -EFAULT;
     }
 
@@ -3232,7 +3237,7 @@ static int vhost_user_get_shmem_config(struct vhost_dev *dev,
         return ret;
     }
 
-    assert(msg.payload.shmem.nregions <= VHOST_USER_MAX_SHMEM_REGIONS);
+    assert(msg.payload.shmem.nregions <= VIRTIO_MAX_SHMEM_REGIONS);
     *nregions = msg.payload.shmem.nregions;
     memcpy(memory_sizes,
            &msg.payload.shmem.memory_sizes,

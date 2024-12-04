@@ -159,6 +159,9 @@ typedef int (*vhost_set_device_state_fd_op)(struct vhost_dev *dev,
                                             int *reply_fd,
                                             Error **errp);
 typedef int (*vhost_check_device_state_op)(struct vhost_dev *dev, Error **errp);
+/* 
+ * Max regions is VIRTIO_MAX_SHMEM_REGIONS, so that is the maximum
+ * number of memory_sizes that will be accepted. */
 typedef int (*vhost_get_shmem_config_op)(struct vhost_dev *dev,
                                          int *nregions,
                                          uint64_t *memory_sizes,

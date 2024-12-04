@@ -1594,7 +1594,7 @@ vu_rm_shared_object(VuDev *dev, unsigned char uuid[UUID_LEN])
 
 bool
 vu_shmem_map(VuDev *dev, uint8_t shmid, uint64_t fd_offset,
-             uint64_t shm_offset, uint64_t len, uint64_t flags)
+             uint64_t shm_offset, uint64_t len, uint64_t flags, int fd)
 {
     VhostUserMsg vmsg = {
         .request = VHOST_USER_BACKEND_SHMEM_MAP,
@@ -1607,6 +1607,8 @@ vu_shmem_map(VuDev *dev, uint8_t shmid, uint64_t fd_offset,
             .len = len,
             .flags = flags,
         },
+        .fd_num = 1,
+        .fds[0] = fd,
     };
 
     if (vu_has_protocol_feature(dev, VHOST_USER_PROTOCOL_F_REPLY_ACK)) {

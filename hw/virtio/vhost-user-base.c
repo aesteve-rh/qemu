@@ -16,6 +16,7 @@
 #include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/vhost-user-base.h"
 #include "qemu/error-report.h"
+#include "migration/blocker.h"
 
 static void vub_start(VirtIODevice *vdev)
 {
@@ -271,7 +272,7 @@ static void vub_device_realize(DeviceState *dev, Error **errp)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
     VHostUserBase *vub = VHOST_USER_BASE(dev);
-    uint64_t memory_sizes[8];
+    uint64_t memory_sizes[VIRTIO_MAX_SHMEM_REGIONS];
     void *cache_ptr;
     int i, ret, nregions;
 
@@ -330,7 +331,7 @@ static void vub_device_realize(DeviceState *dev, Error **errp)
                          VHOST_BACKEND_TYPE_USER, 0, errp);
 
     if (ret < 0) {
-        do_vhost_user_cleanup(vdev, vub);
+        goto err;
     }
 
     ret = vub->vhost_dev.vhost_ops->vhost_get_shmem_config(&vub->vhost_dev,
@@ -339,26 +340,38 @@ static void vub_device_realize(DeviceState *dev, Error **errp)
                                                            errp);
 
     if (ret < 0) {
-        do_vhost_user_cleanup(vdev, vub);
+        goto err;
     }
 
     for (i = 0; i < nregions; i++) {
         if (memory_sizes[i]) {
+            if (vub->vhost_dev.migration_blocker == NULL) {
+                error_setg(&vub->vhost_dev.migration_blocker,
+                       "Migration disabled: devices with VIRTIO Shared Memory "
+                       "Regions do not support migration yet.");
+                ret = migrate_add_blocker_normal(
+                    &vub->vhost_dev.migration_blocker,
+                    errp);
+
+                if (ret < 0) {
+                    goto err;
+                }
+            }
+
             if (memory_sizes[i] % qemu_real_host_page_size() != 0) {
                 error_setg(errp, "Shared memory %d size must be a power of 2 "
                                  "no smaller than the page size", i);
-                return;
+                goto err;
             }
 
             cache_ptr = mmap(NULL, memory_sizes[i], PROT_NONE,
                             MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
             if (cache_ptr == MAP_FAILED) {
                 error_setg_errno(errp, errno, "Unable to mmap blank cache");
-                return;
+                goto err;
             }
 
-            virtio_new_shmem_region(vdev);
-            memory_region_init_ram_ptr(vdev->shmem_list[i].mr,
+            memory_region_init_ram_ptr(virtio_new_shmem_region(vdev)->mr,
                                        OBJECT(vdev), "vub-shm-" + i,
                                        memory_sizes[i], cache_ptr);
         }
@@ -366,6 +379,9 @@ static void vub_device_realize(DeviceState *dev, Error **errp)
 
     qemu_chr_fe_set_handlers(&vub->chardev, NULL, NULL, vub_event, NULL,
                              dev, NULL, true);
+    return;
+err:
+    do_vhost_user_cleanup(vdev, vub);
 }
 
 static void vub_device_unrealize(DeviceState *dev)

@@ -635,16 +635,17 @@ bool vu_rm_shared_object(VuDev *dev, unsigned char uuid[UUID_LEN]);
  * @shm_offset: Offset within the VIRTIO Shared Memory Region
  * @len: Size of the mapping
  * @flags: Flags for the mmap operation
+ * @fd: A file descriptor
  *
  * Advertises a new mapping to be made in a given VIRTIO Shared Memory Region.
  *
  * Returns: TRUE on success, FALSE on failure.
  */
 bool vu_shmem_map(VuDev *dev, uint8_t shmid, uint64_t fd_offset,
-                  uint64_t shm_offset, uint64_t len, uint64_t flags);
+                  uint64_t shm_offset, uint64_t len, uint64_t flags, int fd);
 
 /**
- * vu_shmem_map:
+ * vu_shmem_unmap:
  * @dev: a VuDev context
  * @shmid: VIRTIO Shared Memory Region ID
  * @fd_offset: File offset

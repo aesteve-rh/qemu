@@ -81,6 +81,8 @@ typedef struct VirtQueueElement
 
 #define VIRTIO_NO_VECTOR 0xffff
 
+#define VIRTIO_MAX_SHMEM_REGIONS 256
+
 /* special index value used internally for config irqs */
 #define VIRTIO_CONFIG_IRQ_IDX -1
 
@@ -312,6 +314,8 @@ void virtio_del_shmem_map(VirtSharedMemory *shmem, hwaddr offset,
                           uint64_t size);
 bool virtio_shmem_map_overlaps(VirtSharedMemory *shmem, hwaddr offset,
                                uint64_t size);
+bool virtio_shmem_map_matches(VirtSharedMemory *shmem, hwaddr offset,
+                               uint64_t size);                               
 
 extern const VMStateInfo virtio_vmstate_info;
 

@@ -13,13 +13,13 @@
 #include "hw/virtio/vhost-user-base.h"
 #include "hw/virtio/virtio-pci.h"
 
-#define VIRTIO_DEVICE_PCI_CACHE_BAR 2
+#define VIRTIO_DEVICE_PCI_SHMEM_BAR 2
 
 struct VHostUserDevicePCI {
     VirtIOPCIProxy parent_obj;
 
     VHostUserBase vub;
-    MemoryRegion cachebar;
+    MemoryRegion shmembar;
 };
 
 #define TYPE_VHOST_USER_DEVICE_PCI "vhost-user-device-pci-base"
@@ -32,7 +32,7 @@ static void vhost_user_device_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp
     DeviceState *dev_state = DEVICE(&dev->vub);
     VirtIODevice *vdev = VIRTIO_DEVICE(dev_state);
     MemoryRegion *mr;
-    uint64_t offset = 0, cache_size = 0;
+    uint64_t offset = 0, shmem_size = 0;
     int i;
     
     vpci_dev->nvectors = 1;
@@ -40,27 +40,26 @@ static void vhost_user_device_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp
 
     for (i = 0; i < vdev->n_shmem_regions; i++) {
         mr = vdev->shmem_list[i].mr;
-        if (mr->size > UINT64_MAX - cache_size) {
+        if (mr->size > UINT64_MAX - shmem_size) {
             error_setg(errp, "Total shared memory required overflow");
             return;
         }
-        cache_size = cache_size + mr->size;
+        shmem_size = shmem_size + mr->size;
     }
-    if (cache_size) {
-        memory_region_init(&dev->cachebar, OBJECT(vpci_dev),
-                           "vhost-device-pci-cachebar", cache_size);
+    if (shmem_size) {
+        memory_region_init(&dev->shmembar, OBJECT(vpci_dev),
+                           "vhost-device-pci-shmembar", shmem_size);
         for (i = 0; i < vdev->n_shmem_regions; i++) {
-            mr = vdev->shmem_list[i].mr;
-            memory_region_add_subregion(&dev->cachebar, offset, mr);
-            virtio_pci_add_shm_cap(vpci_dev, VIRTIO_DEVICE_PCI_CACHE_BAR,
+            memory_region_add_subregion(&dev->shmembar, offset, mr);
+            virtio_pci_add_shm_cap(vpci_dev, VIRTIO_DEVICE_PCI_SHMEM_BAR,
                                    offset, mr->size, i);
             offset = offset + mr->size;
         }
-        pci_register_bar(&vpci_dev->pci_dev, VIRTIO_DEVICE_PCI_CACHE_BAR,
+        pci_register_bar(&vpci_dev->pci_dev, VIRTIO_DEVICE_PCI_SHMEM_BAR,
                         PCI_BASE_ADDRESS_SPACE_MEMORY |
                         PCI_BASE_ADDRESS_MEM_PREFETCH |
                         PCI_BASE_ADDRESS_MEM_TYPE_64,
-                        &dev->cachebar);
+                        &dev->shmembar);
     }
 }
 

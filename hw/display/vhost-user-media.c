@@ -294,7 +294,6 @@ static void vhost_user_media_device_realize(DeviceState *dev, Error **errp)
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
     VHostUserMEDIA *media = VHOST_USER_MEDIA(dev);
     void *cache_ptr;
-    MemoryRegion *mr;
     int ret;
 
     if (!media->conf.chardev.chr) {
@@ -314,12 +313,8 @@ static void vhost_user_media_device_realize(DeviceState *dev, Error **errp)
         error_setg(errp, "Unable to mmap blank cache");
         return;
     }
-    ++vdev->n_shmem_regions;
-    vdev->shmem_list = g_renew(MemoryRegion, vdev->shmem_list,
-                               vdev->n_shmem_regions);
-    mr = g_new0(MemoryRegion, 1);
-    vdev->shmem_list[vdev->n_shmem_regions - 1] = *mr;
-    memory_region_init_ram_ptr(&vdev->shmem_list[vdev->n_shmem_regions - 1],
+
+    memory_region_init_ram_ptr(virtio_new_shmem_region(vdev)->mr,
                                OBJECT(vdev),
                                "virtio-media-cache",
                                CACHE_SIZE, cache_ptr);

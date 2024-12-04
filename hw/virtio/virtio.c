@@ -3066,14 +3066,12 @@ int virtio_save(VirtIODevice *vdev, QEMUFile *f)
 
 VirtSharedMemory *virtio_new_shmem_region(VirtIODevice *vdev)
 {
-    VirtSharedMemory *shmem = NULL;
     ++vdev->n_shmem_regions;
     vdev->shmem_list = g_renew(VirtSharedMemory, vdev->shmem_list,
                                vdev->n_shmem_regions);
-    shmem = &vdev->shmem_list[vdev->n_shmem_regions - 1];
-    shmem = g_new0(VirtSharedMemory, 1);
-    QTAILQ_INIT(&shmem->mapped_regions);
-    return shmem;
+    vdev->shmem_list[vdev->n_shmem_regions - 1].mr = g_new0(MemoryRegion, 1);
+    QTAILQ_INIT(&vdev->shmem_list[vdev->n_shmem_regions - 1].mapped_regions);
+    return &vdev->shmem_list[vdev->n_shmem_regions - 1];
 }
 
 void virtio_add_shmem_map(VirtSharedMemory *shmem, hwaddr offset,
@@ -3082,18 +3080,19 @@ void virtio_add_shmem_map(VirtSharedMemory *shmem, hwaddr offset,
     MappedMemoryRegion *mmap = g_new0(MappedMemoryRegion, 1);
     mmap->offset = offset;
     mmap->size = int128_make64(size);
-    QTAILQ_REMOVE(&shmem->mapped_regions, mmap, link);
-    g_free(mmap);
+    QTAILQ_INSERT_TAIL(&shmem->mapped_regions, mmap, link);
 }
 
 void virtio_del_shmem_map(VirtSharedMemory *shmem, hwaddr offset,
                           uint64_t size)
 {
-    MappedMemoryRegion *mmap = g_new0(MappedMemoryRegion, 1);
-    mmap->offset = offset;
-    mmap->size = int128_make64(size);
-    QTAILQ_INSERT_TAIL(&shmem->mapped_regions, mmap, link);
-    g_free(mmap);
+    MappedMemoryRegion *mmap;
+    QTAILQ_FOREACH(mmap, &shmem->mapped_regions, link) {
+        if (mmap->offset == offset && mmap->size == size) {
+            QTAILQ_REMOVE(&shmem->mapped_regions, mmap, link);
+            g_free(mmap);
+        }
+    }
 }
 
 bool virtio_shmem_map_overlaps(VirtSharedMemory *shmem, hwaddr offset,
@@ -3102,10 +3101,22 @@ bool virtio_shmem_map_overlaps(VirtSharedMemory *shmem, hwaddr offset,
     MappedMemoryRegion *map_reg;
     hwaddr new_reg_end = offset + size;
     QTAILQ_FOREACH(map_reg, &shmem->mapped_regions, link) {
-        hwaddr region_end = map_reg->offset + map_reg->size;
+        hwaddr region_end = map_reg->offset + map_reg->size - 1;
         if ((map_reg->offset == offset) ||
             (map_reg->offset < offset && region_end >= offset) ||
-            (offset < map_reg->offset && new_reg_end >= map_reg->offset )) {
+            (offset < map_reg->offset && new_reg_end >= map_reg->offset)) {
+            return true;
+        }
+    }
+    return false;   
+}
+
+bool virtio_shmem_map_matches(VirtSharedMemory *shmem, hwaddr offset,
+                               uint64_t size)
+{
+    MappedMemoryRegion *mmap;
+    QTAILQ_FOREACH(mmap, &shmem->mapped_regions, link) {
+        if (mmap->offset == offset && mmap->size == size) {
             return true;
         }
     }
@@ -4061,6 +4072,7 @@ static void virtio_device_instance_finalize(Object *obj)
         while (!QTAILQ_EMPTY(&shmem->mapped_regions)) {
             MappedMemoryRegion *mmap_reg = QTAILQ_FIRST(&shmem->mapped_regions);
             QTAILQ_REMOVE(&shmem->mapped_regions, mmap_reg, link);
+            g_free(mmap_reg);
         }
     }
 }
