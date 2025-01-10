@@ -44,6 +44,7 @@ static void vumedia_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
     VHostUserMEDIAPCI *dev = VHOST_USER_MEDIA_PCI(vpci_dev);
     DeviceState *dev_state = DEVICE(&dev->vdev);
     VirtIODevice *vdev = VIRTIO_DEVICE(dev_state);
+    //VirtSharedMemoryBase *shmem = VIRTIO_SHM(dev_state);
 
     if (vpci_dev->nvectors == DEV_NVECTORS_UNSPECIFIED) {
         vpci_dev->nvectors = 1;
@@ -58,7 +59,9 @@ static void vumedia_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
      */
     memory_region_init(&dev->cachebar, OBJECT(vpci_dev),
                        "vhost-media-pci-cachebar", CACHE_SIZE);
-    memory_region_add_subregion(&dev->cachebar, 0, vdev->shmem_list[vdev->n_shmem_regions - 1].mr);
+    memory_region_add_subregion_overlap(&dev->cachebar, 0,
+                                        vdev->shmem_list[vdev->n_shmem_regions - 1].mr,
+                                        1);
     virtio_pci_add_shm_cap(vpci_dev, VIRTIO_MEDIA_PCI_CACHE_BAR, 0,
                             CACHE_SIZE, VIRTIO_MEDIA_PCI_SHMCAP_ID_CACHE);
 

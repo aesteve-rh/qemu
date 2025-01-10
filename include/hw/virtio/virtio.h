@@ -89,6 +89,9 @@ typedef struct VirtQueueElement
 #define TYPE_VIRTIO_DEVICE "virtio-device"
 OBJECT_DECLARE_TYPE(VirtIODevice, VirtioDeviceClass, VIRTIO_DEVICE)
 
+//#define TYPE_VIRTIO_SHM "virtio-shm"
+//OBJECT_DECLARE_TYPE(VirtSharedMemoryBase, VirtSharedMemoryClass, VIRTIO_SHM)
+
 typedef struct {
     int virtio_bit;
     const char *feature_desc;
@@ -101,16 +104,18 @@ enum virtio_device_endian {
 };
 
 struct MappedMemoryRegion {
-    Int128 size;
+    MemoryRegion* mem;
     hwaddr offset;
+    size_t size;
     QTAILQ_ENTRY(MappedMemoryRegion) link;
 };
 
 typedef struct MappedMemoryRegion MappedMemoryRegion;
 
 struct VirtSharedMemory {
-    MemoryRegion *mr;
-    QTAILQ_HEAD(, MappedMemoryRegion) mapped_regions;
+    MemoryRegion* mr;
+    uint32_t nr_mmaps;
+    QTAILQ_HEAD(, MappedMemoryRegion) mmaps;
 };
 
 typedef struct VirtSharedMemory VirtSharedMemory;
@@ -308,8 +313,8 @@ void virtio_notify(VirtIODevice *vdev, VirtQueue *vq);
 int virtio_save(VirtIODevice *vdev, QEMUFile *f);
 
 VirtSharedMemory *virtio_new_shmem_region(VirtIODevice *vdev);
-void virtio_add_shmem_map(VirtSharedMemory *shmem, hwaddr offset,
-                          uint64_t size);
+void virtio_add_shmem_map(VirtIODevice *vdev, int shmid, const char *name,
+                          hwaddr shm_offset, hwaddr fd_offset, uint64_t size, int fd, Error **errp);
 void virtio_del_shmem_map(VirtSharedMemory *shmem, hwaddr offset,
                           uint64_t size);
 bool virtio_shmem_map_overlaps(VirtSharedMemory *shmem, hwaddr offset,

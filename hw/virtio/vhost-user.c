@@ -1817,10 +1817,12 @@ vhost_user_backend_handle_shared_object_lookup(struct vhost_user *u,
 static int
 vhost_user_backend_handle_shmem_map(struct vhost_dev *dev,
                                     VhostUserMMap *vu_mmap,
-                                    int fd)
+                                    int fd, Error **errp)
 {
-    void *addr = 0;
     VirtSharedMemory *shmem = NULL;
+    //VirtSharedMemoryBase *smb = VIRTIO_SHM(dev->vdev);
+    g_autoptr(GString) shm_name = g_string_new(NULL);
+    shmem = g_new0(VirtSharedMemory, 1);
 
     if (fd < 0) {
         error_report("Bad fd for map");
@@ -1835,6 +1837,7 @@ vhost_user_backend_handle_shmem_map(struct vhost_dev *dev,
         return -EFAULT;
     }
 
+    //shmem = virtio_new_shmem_region(dev->vdev);
     shmem = &dev->vdev->shmem_list[vu_mmap->shmid];
 
     if (!shmem) {
@@ -1850,26 +1853,29 @@ vhost_user_backend_handle_shmem_map(struct vhost_dev *dev,
         return -EFAULT;
     }
 
-    if (virtio_shmem_map_overlaps(shmem, vu_mmap->shm_offset, vu_mmap->len)) {
+    g_string_printf(shm_name, "/virtio-shm%i-%lu", vu_mmap->shmid, vu_mmap->shm_offset);
+    virtio_add_shmem_map(dev->vdev, vu_mmap->shmid, shm_name->str, vu_mmap->shm_offset, vu_mmap->fd_offset, vu_mmap->len, fd, errp);
+    g_free(shm_name);
+    /*if (virtio_shmem_map_overlaps(shmem, vu_mmap->shm_offset, vu_mmap->len)) {
         error_report("Requested memory (%" PRIx64 "+%" PRIx64 ") overalps "
                      "with previously mapped memory",
                      vu_mmap->shm_offset, vu_mmap->len);
         return -EFAULT;
-    }
+    }*/
 
-    void *shmem_ptr = memory_region_get_ram_ptr(shmem->mr);
+    // void *shmem_ptr = memory_region_get_ram_ptr(shmem->mr);
 
-    addr = mmap(shmem_ptr + vu_mmap->shm_offset, vu_mmap->len,
-        ((vu_mmap->flags & VHOST_USER_FLAG_MAP_R) ? PROT_READ : 0) |
-        ((vu_mmap->flags & VHOST_USER_FLAG_MAP_W) ? PROT_WRITE : 0),
-        MAP_SHARED | MAP_FIXED, fd, vu_mmap->fd_offset);
+    // addr = mmap(shmem_ptr + vu_mmap->shm_offset, vu_mmap->len,
+    //     ((vu_mmap->flags & VHOST_USER_FLAG_MAP_R) ? PROT_READ : 0) |
+    //     ((vu_mmap->flags & VHOST_USER_FLAG_MAP_W) ? PROT_WRITE : 0),
+    //     MAP_SHARED | MAP_FIXED, fd, vu_mmap->fd_offset);
 
-    if (addr == MAP_FAILED) {
-        error_report("Failed to mmap mem fd");
-        return -EFAULT;
-    }
+    // if (addr == MAP_FAILED) {
+    //     error_report("Failed to mmap mem fd");
+    //     return -EFAULT;
+    // }
 
-    virtio_add_shmem_map(shmem, vu_mmap->shm_offset, vu_mmap->len);
+    // virtio_add_shmem_map(shmem, vu_mmap->shm_offset, vu_mmap->len);
 
     return 0;
 }
@@ -1878,7 +1884,6 @@ static int
 vhost_user_backend_handle_shmem_unmap(struct vhost_dev *dev,
                                       VhostUserMMap *vu_mmap)
 {
-    void *addr = 0;
     VirtSharedMemory *shmem = NULL;
 
     if (!dev->vdev->shmem_list ||
@@ -1904,22 +1909,21 @@ vhost_user_backend_handle_shmem_unmap(struct vhost_dev *dev,
         return -EFAULT;
     }
 
-    if (!virtio_shmem_map_matches(shmem, vu_mmap->shm_offset, vu_mmap->len)) {
+    /*if (!virtio_shmem_map_matches(shmem, vu_mmap->shm_offset, vu_mmap->len)) {
         error_report("Requested offset/len for unmap (%" PRIx64 "+%" PRIx64") "
                      "does not match any previously mapped region",
                     vu_mmap->shm_offset, vu_mmap->len);
         return -EFAULT;
-    }
+    }*/
 
-    void *shmem_ptr = memory_region_get_ram_ptr(shmem->mr);
+    // void *shmem_ptr = memory_region_get_ram_ptr(shmem->mr);
+    // addr = mmap(shmem_ptr + vu_mmap->shm_offset, vu_mmap->len,
+    //            PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
 
-    addr = mmap(shmem_ptr + vu_mmap->shm_offset, vu_mmap->len,
-                PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-
-    if (addr == MAP_FAILED) {
-        error_report("Failed to unmap memory");
-        return -EFAULT;
-    }
+    // if (addr == MAP_FAILED) {
+    //    error_report("Failed to unmap memory");
+    //    return -EFAULT;
+    // }
 
     virtio_del_shmem_map(shmem, vu_mmap->shm_offset, vu_mmap->len);
 
@@ -2025,7 +2029,7 @@ static gboolean backend_read(QIOChannel *ioc, GIOCondition condition,
         break;
     case VHOST_USER_BACKEND_SHMEM_MAP:
         ret = vhost_user_backend_handle_shmem_map(dev, &payload->mmap,
-                                                  fd ? fd[0] : -1);
+                                                  fd ? fd[0] : -1, &local_err);
         break;
     case VHOST_USER_BACKEND_SHMEM_UNMAP:
         ret = vhost_user_backend_handle_shmem_unmap(dev, &payload->mmap);
