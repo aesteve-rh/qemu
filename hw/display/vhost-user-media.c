@@ -119,7 +119,7 @@ static void vhost_user_media_stop(VirtIODevice *vdev)
     vhost_dev_disable_notifiers(&media->vhost_dev, vdev);
 }
 
-static void vhost_user_media_set_status(VirtIODevice *vdev, uint8_t status)
+static int vhost_user_media_set_status(VirtIODevice *vdev, uint8_t status)
 {
     VHostUserMEDIA *media = VHOST_USER_MEDIA(vdev);
     bool should_start = status & VIRTIO_CONFIG_S_DRIVER_OK;
@@ -129,7 +129,7 @@ static void vhost_user_media_set_status(VirtIODevice *vdev, uint8_t status)
     }
 
     if (media->vhost_dev.started == should_start) {
-        return;
+        return -1;
     }
 
     if (should_start) {
@@ -137,6 +137,7 @@ static void vhost_user_media_set_status(VirtIODevice *vdev, uint8_t status)
     } else {
         vhost_user_media_stop(vdev);
     }
+    return 0;
 }
 
 static uint64_t vhost_user_media_get_features(VirtIODevice *vdev,
@@ -293,8 +294,6 @@ static void vhost_user_media_device_realize(DeviceState *dev, Error **errp)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
     VHostUserMEDIA *media = VHOST_USER_MEDIA(dev);
-    void *cache_ptr;
-    MemoryRegion *mr;
     int ret;
 
     if (!media->conf.chardev.chr) {
@@ -308,21 +307,8 @@ static void vhost_user_media_device_realize(DeviceState *dev, Error **errp)
 
     virtio_init(vdev, VIRTIO_ID_MEDIA, sizeof(struct virtio_media_config));
 
-    cache_ptr = mmap(NULL, CACHE_SIZE, PROT_READ,
-                         MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    if (cache_ptr == MAP_FAILED) {
-        error_setg(errp, "Unable to mmap blank cache");
-        return;
-    }
-    ++vdev->n_shmem_regions;
-    vdev->shmem_list = g_renew(MemoryRegion, vdev->shmem_list,
-                               vdev->n_shmem_regions);
-    mr = g_new0(MemoryRegion, 1);
-    vdev->shmem_list[vdev->n_shmem_regions - 1] = *mr;
-    memory_region_init_ram_ptr(&vdev->shmem_list[vdev->n_shmem_regions - 1],
-                               OBJECT(vdev),
-                               "virtio-media-cache",
-                               CACHE_SIZE, cache_ptr);
+    memory_region_init(virtio_new_shmem_region(vdev, 0)->mr, OBJECT(vdev),
+                       "virtio-media-cache", CACHE_SIZE);
 
     /* one command queue and one event queue */
     media->vhost_dev.nvqs = 2;
@@ -394,12 +380,11 @@ static const VMStateDescription vhost_user_media_vmstate = {
     .unmigratable = 1,
 };
 
-static Property vhost_user_media_properties[] = {
+static const Property vhost_user_media_properties[] = {
     DEFINE_PROP_CHR("chardev", VHostUserMEDIA, conf.chardev),
-    DEFINE_PROP_END_OF_LIST(),
 };
 
-static void vhost_user_media_class_init(ObjectClass *klass, void *data)
+static void vhost_user_media_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     VirtioDeviceClass *vdc = VIRTIO_DEVICE_CLASS(klass);

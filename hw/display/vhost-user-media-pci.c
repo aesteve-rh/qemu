@@ -16,7 +16,7 @@
 
 #define VIRTIO_MEDIA_PCI_SHMCAP_ID_CACHE 0
 
-#define CACHE_SIZE 1ull << 30
+#define CACHE_SIZE 1ull << 32
 
 struct VHostUserMEDIAPCI {
     VirtIOPCIProxy parent_obj;
@@ -31,12 +31,11 @@ typedef struct VHostUserMEDIAPCI VHostUserMEDIAPCI;
 #define VHOST_USER_MEDIA_PCI(obj) \
         OBJECT_CHECK(VHostUserMEDIAPCI, (obj), TYPE_VHOST_USER_MEDIA_PCI)
 
-static Property vumedia_pci_properties[] = {
+static const Property vumedia_pci_properties[] = {
     DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags,
                     VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, true),
     DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors,
                        DEV_NVECTORS_UNSPECIFIED),
-    DEFINE_PROP_END_OF_LIST(),
 };
 
 static void vumedia_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
@@ -58,7 +57,8 @@ static void vumedia_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
      */
     memory_region_init(&dev->cachebar, OBJECT(vpci_dev),
                        "vhost-media-pci-cachebar", CACHE_SIZE);
-    memory_region_add_subregion(&dev->cachebar, 0, &vdev->shmem_list[vdev->n_shmem_regions - 1]);
+    memory_region_add_subregion(&dev->cachebar, 0,
+                                QSIMPLEQ_LAST(&vdev->shmem_list, VirtSharedMemory, entry)->mr);
     virtio_pci_add_shm_cap(vpci_dev, VIRTIO_MEDIA_PCI_CACHE_BAR, 0,
                             CACHE_SIZE, VIRTIO_MEDIA_PCI_SHMCAP_ID_CACHE);
 
@@ -70,7 +70,7 @@ static void vumedia_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
                      &dev->cachebar);
 }
 
-static void vumedia_pci_class_init(ObjectClass *klass, void *data)
+static void vumedia_pci_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     VirtioPCIClass *k = VIRTIO_PCI_CLASS(klass);
