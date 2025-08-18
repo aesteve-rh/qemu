@@ -295,6 +295,7 @@ static void vhost_user_media_device_realize(DeviceState *dev, Error **errp)
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
     VHostUserMEDIA *media = VHOST_USER_MEDIA(dev);
     int ret;
+    VirtioSharedMemory *shmem;
 
     if (!media->conf.chardev.chr) {
         error_setg(errp, "vhost-user-media: chardev is mandatory");
@@ -307,7 +308,8 @@ static void vhost_user_media_device_realize(DeviceState *dev, Error **errp)
 
     virtio_init(vdev, VIRTIO_ID_MEDIA, sizeof(struct virtio_media_config));
 
-    memory_region_init(virtio_new_shmem_region(vdev, 0)->mr, OBJECT(vdev),
+    shmem = virtio_new_shmem_region(vdev, 0, CACHE_SIZE);
+    memory_region_init(&shmem->mr, OBJECT(vdev),
                        "virtio-media-cache", CACHE_SIZE);
 
     /* one command queue and one event queue */

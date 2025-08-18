@@ -58,7 +58,7 @@ static void vumedia_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
     memory_region_init(&dev->cachebar, OBJECT(vpci_dev),
                        "vhost-media-pci-cachebar", CACHE_SIZE);
     memory_region_add_subregion(&dev->cachebar, 0,
-                                QSIMPLEQ_LAST(&vdev->shmem_list, VirtSharedMemory, entry)->mr);
+                                &QSIMPLEQ_LAST(&vdev->shmem_list, VirtioSharedMemory, entry)->mr);
     virtio_pci_add_shm_cap(vpci_dev, VIRTIO_MEDIA_PCI_CACHE_BAR, 0,
                             CACHE_SIZE, VIRTIO_MEDIA_PCI_SHMCAP_ID_CACHE);
 
